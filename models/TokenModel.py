@@ -1,10 +1,14 @@
+from datetime import datetime
+
 from sqlmodel import SQLModel, Field
 
 
-# Token model for JWT authentication and payload.
-class Token(SQLModel, table=True):
-    __tablename__ = "token"
-
-    # Attributes
-    access_token: str | None = Field(default=None, primary_key=True)
+# Token model for JWT authentication
+class Token(SQLModel):
+    access_token: str
+    refresh_token: str
     token_type: str
+
+
+class RefreshTokenCreate(SQLModel):
+    refresh_token: str

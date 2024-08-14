@@ -14,7 +14,8 @@ class User(UserBase, table=True):
     # Attributes
     id: int | None = Field(default=None, primary_key=True)
     fullname: str = Field(unique=True)
-    password: str
+    password: str | None = Field(default=None)
+    google_sub: str | None = Field(default=None, unique=True)
 
 
 # Data model used for requests/responses in the application.

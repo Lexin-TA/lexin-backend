@@ -1,4 +1,3 @@
-# Load environment variables.
 import os
 from datetime import datetime, timezone, timedelta
 
@@ -26,15 +25,21 @@ password_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/user/token", scheme_name="JWT")
 
 
-# Authorization utility functions.
+# Hash password string.
 def get_hashed_password(password: str) -> str:
     return password_context.hash(password)
 
 
+# Verify password string.
 def verify_password(password: str, hashed_pass: str) -> bool:
     return password_context.verify(password, hashed_pass)
 
 
+# Create JWT access token with the following payload:
+# {
+#   "sub": user id,
+#   "exp": jwt expiration time
+# }
 def create_access_token(data: dict) -> str:
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + timedelta(JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -43,6 +48,7 @@ def create_access_token(data: dict) -> str:
     return encoded_jwt
 
 
+# Create JWT refresh token with the same payload as the JWT access token.
 def create_refresh_token(data: dict) -> str:
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + timedelta(JWT_REFRESH_TOKEN_EXPIRE_MINUTES)
