@@ -51,7 +51,7 @@ async def login_google(request: Request):
     return result
 
 
-@router.get("/callback/google")
+@router.get("/auth/google")
 async def auth_google(*, session: Session = Depends(get_session), request: Request):
     result = await UserGoogleService.get_auth_google(session, request)
 

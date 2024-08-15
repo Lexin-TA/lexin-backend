@@ -10,14 +10,6 @@ from models.UserGoogleModel import UserGoogle
 from models.UserModel import User
 
 
-# Redirect to Google's login page.
-async def get_login_google(request: Request):
-    # Request Google authorization page.
-    result = await oauth.google.authorize_redirect(request, GOOGLE_REDIRECT_URI)
-
-    return result
-
-
 # Get User object by google sub.
 def get_user_by_google_sub(google_sub: int, session: Session) -> User:
     statement = select(User).where(User.google_sub == str(google_sub))
@@ -55,6 +47,15 @@ def create_user_from_google_info(user_google: UserGoogle, session: Session):
         return new_user
 
 
+# Redirect to Google's login page.
+async def get_login_google(request: Request):
+    # Request Google authorization page.
+    result = await oauth.google.authorize_redirect(request, GOOGLE_REDIRECT_URI)
+
+    # After successful login, go to GOOGLE_REDIRECT_URI (specifically, go to get_auth_google function).
+    return result
+
+
 # Validate the request's Google access token to get user information, then create user access and refresh token.
 async def get_auth_google(session: Session, request: Request):
     # Get user information from Google access token.
@@ -65,7 +66,6 @@ async def get_auth_google(session: Session, request: Request):
 
     # Extract userinfo from the response.
     user_info = user_response.get("userinfo")
-    print(user_info)
 
     # Map userinfo to UserGoogle class then use it to find the corresponding User class.
     google_user = UserGoogle(**user_info)
