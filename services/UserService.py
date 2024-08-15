@@ -115,13 +115,6 @@ def login_for_access_token(session: Session, form_data: Annotated[OAuth2Password
                      refresh_token=refresh_token,
                      token_type="Bearer")
 
-    try:
-        session.add(db_token)
-        session.commit()
-        session.refresh(db_token)
-    except SQLAlchemyError as e:
-        raise HTTPException(status_code=422, detail=str(e.orig))
-
     return db_token
 
 
@@ -158,12 +151,5 @@ def get_access_token_with_refresh_token(session: Session, refresh_token_create: 
     db_token = Token(access_token=access_token,
                      refresh_token=refresh_token,
                      token_type="Bearer")
-
-    try:
-        session.add(db_token)
-        session.commit()
-        session.refresh(db_token)
-    except SQLAlchemyError as e:
-        raise HTTPException(status_code=422, detail=str(e.orig))
 
     return db_token
