@@ -1,10 +1,9 @@
-from datetime import datetime, timezone
 from typing import Annotated
 
 import jwt
 from fastapi import HTTPException, Depends, status
 from fastapi.security import OAuth2PasswordRequestForm
-from jwt import InvalidTokenError
+from jwt import InvalidTokenError, ExpiredSignatureError
 from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session, select
 
@@ -89,10 +88,9 @@ def get_current_user(session: Session, token: Annotated[str, Depends(oauth2_sche
     except InvalidTokenError:
         raise credentials_exception
 
-    # Get user with said id.
+    # Get user with said id and check if it exists in database.
     db_user = get_user_by_id(session, id=user_id)
 
-    # Check if user with the id mentioned exists in the database.
     if db_user is None:
         raise credentials_exception
 
@@ -119,30 +117,30 @@ def login_for_access_token(session: Session, form_data: Annotated[OAuth2Password
 
 
 # Verify if refresh token is expired.
-def refresh_token_expired(token: Annotated[str, Depends(oauth2_scheme)]):
+def check_refresh_token_expiration(token: Annotated[str, Depends(oauth2_scheme)]):
     try:
-        payload = jwt.decode(token, JWT_REFRESH_SECRET_KEY, algorithms=[JWT_ALGORITHM])
-        expired_time = datetime.fromtimestamp(payload.get('exp'), timezone.utc)
-        current_time = datetime.now(timezone.utc)
+        jwt.decode(token, JWT_REFRESH_SECRET_KEY, algorithms=[JWT_ALGORITHM])
 
-        if current_time > expired_time:
-            return True
-        return False
-
-    except InvalidTokenError:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Could not validate user.")
+    except ExpiredSignatureError as e:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
+    except InvalidTokenError as e:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
 
 
 def get_access_token_with_refresh_token(session: Session, refresh_token_create: RefreshTokenCreate):
     token = refresh_token_create.refresh_token
 
-    if refresh_token_expired(token):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token is expired.")
+    # Check if refresh token expired or not.
+    check_refresh_token_expiration(token)
 
+    # Extract payload and see if user exists in database.
     payload = jwt.decode(token, JWT_REFRESH_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+    user_id = payload["sub"]
+
+    _ = get_user_by_id(session, user_id)
 
     # Create access and refresh tokens with user id as the sub.
-    token_data = {"sub": payload.get("sub")}
+    token_data = {"sub": user_id}
 
     access_token = create_access_token(data=token_data)
     refresh_token = create_refresh_token(data=token_data)

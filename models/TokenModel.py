@@ -1,8 +1,7 @@
-from datetime import datetime
-
-from sqlmodel import SQLModel, Field
+from sqlmodel import SQLModel
 
 
+# Data model used for requests/responses in the application.
 # Token model for JWT authentication
 class Token(SQLModel):
     access_token: str

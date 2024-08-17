@@ -35,12 +35,18 @@ def verify_password(password: str, hashed_pass: str) -> bool:
     return password_context.verify(password, hashed_pass)
 
 
-# Create JWT access token with the following payload:
-# {
-#   "sub": user id,
-#   "exp": jwt expiration time
-# }
+# Create JWT access token used in user authentication.
 def create_access_token(data: dict) -> str:
+    """
+    Create JWT access token with the following specification:
+
+    payload:
+        {
+          "sub": user id,
+          "exp": jwt expiration time
+        }
+    """
+
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + timedelta(JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})

@@ -1,4 +1,5 @@
 import os
+from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, APIRouter
@@ -15,6 +16,13 @@ load_dotenv()
 SECRET_KEY = os.getenv("SECRET_KEY")
 
 
+# Database Setup.
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    create_db_and_tables()
+    yield
+
+
 # FastAPI Application.
 class LexinBackendMicroservice(FastAPI):
     def __init__(self, *args, **kwargs):
@@ -23,11 +31,8 @@ class LexinBackendMicroservice(FastAPI):
         self.__ws_connections = dict()
 
 
-app = LexinBackendMicroservice()
-# app = LexinBackendMicroservice(middleware=[
-#     Middleware(CORSMiddleware, allow_origins=["*"]),
-#     Middleware(SessionMiddleware, secret_key=SECRET_KEY)
-# ])
+app = LexinBackendMicroservice(lifespan=lifespan)
+
 
 # Middleware Setup.
 origins = ["*"]
@@ -40,12 +45,6 @@ app.add_middleware(CORSMiddleware,
 
 app.add_middleware(SessionMiddleware,
                    secret_key=SECRET_KEY)
-
-
-# Database Setup.
-@app.on_event("startup")
-def on_startup():
-    create_db_and_tables()
 
 
 # Router Setup.
