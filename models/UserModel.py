@@ -1,5 +1,5 @@
 from pydantic import EmailStr
-from sqlmodel import SQLModel, Field
+from sqlmodel import SQLModel, Field, Relationship
 
 
 # Base model.
@@ -11,11 +11,15 @@ class UserBase(SQLModel):
 class User(UserBase, table=True):
     __tablename__ = "users"
 
-    # Attributes
+    # Attributes.
     id: int | None = Field(default=None, primary_key=True)
     fullname: str
     password: str | None = Field(default=None)
     google_sub: str | None = Field(default=None, unique=True)
+
+    # Relationships.
+    chat_rooms: list['ChatRoom'] = Relationship(back_populates='user',
+                                                sa_relationship_kwargs={'cascade': 'all, delete, delete-orphan'})
 
 
 # Data model used for requests/responses in the application.

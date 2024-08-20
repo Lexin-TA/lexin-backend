@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 from sqlmodel import Session, SQLModel, create_engine, select
 from sqlmodel.pool import StaticPool
 
-from internal.authorization import verify_password, create_access_token, JWT_REFRESH_SECRET_KEY, JWT_ALGORITHM
+from internal.auth import verify_password, create_access_token, JWT_REFRESH_SECRET_KEY, JWT_ALGORITHM
 from main import app
 from internal.database import get_session
 from models.UserModel import User

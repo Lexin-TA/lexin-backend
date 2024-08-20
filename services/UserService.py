@@ -1,14 +1,9 @@
-from typing import Annotated
-
-import jwt
-from fastapi import HTTPException, Depends, status
-from fastapi.security import OAuth2PasswordRequestForm
-from jwt import InvalidTokenError, ExpiredSignatureError
+from fastapi import HTTPException, status
 from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session, select
 
-from internal.authorization import JWT_ACCESS_SECRET_KEY, JWT_ALGORITHM, verify_password, oauth2_scheme, \
-    create_access_token, get_hashed_password, create_refresh_token, JWT_REFRESH_SECRET_KEY
+from internal.auth import get_hashed_password, verify_password, OAuth2FormDep, create_access_token, \
+    create_refresh_token, jwt_decode_refresh, JWTDecodeDep
 from models.TokenModel import Token, RefreshTokenCreate
 from models.UserModel import User, UserCreate
 
@@ -44,9 +39,9 @@ def get_user_by_email(session: Session, email: str) -> User:
 
 
 # Get User object by id.
-def get_user_by_id(session: Session, id: int) -> User:
+def get_user_by_id(session: Session, user_id: int) -> User:
     try:
-        statement = select(User).where(User.id == id)
+        statement = select(User).where(User.id == user_id)
         result = session.exec(statement)
         db_user = result.first()
     except SQLAlchemyError as e:
@@ -70,7 +65,7 @@ def authenticate_user(session: Session, email: str, password: str) -> User:
     return user
 
 
-def get_current_user(session: Session, token: Annotated[str, Depends(oauth2_scheme)]) -> User:
+def get_current_user(session: Session, token_payload: JWTDecodeDep) -> User:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -78,19 +73,10 @@ def get_current_user(session: Session, token: Annotated[str, Depends(oauth2_sche
     )
 
     # Get sub attribute from jwt token which stores the id of the user.
-    try:
-        payload = jwt.decode(token, JWT_ACCESS_SECRET_KEY, algorithms=[JWT_ALGORITHM])
-        user_id: int = payload.get("sub")
-
-        if user_id is None:
-            raise credentials_exception
-
-    except InvalidTokenError:
-        raise credentials_exception
+    user_id = token_payload["sub"]
 
     # Get user with said id and check if it exists in database.
-    db_user = get_user_by_id(session, id=user_id)
-
+    db_user = get_user_by_id(session, user_id=user_id)
     if db_user is None:
         raise credentials_exception
 
@@ -98,7 +84,7 @@ def get_current_user(session: Session, token: Annotated[str, Depends(oauth2_sche
 
 
 # Use email and password to create access and refresh JWT tokens.
-def login_for_access_token(session: Session, form_data: Annotated[OAuth2PasswordRequestForm, Depends()]) -> Token:
+def login_for_access_token(session: Session, form_data: OAuth2FormDep) -> Token:
     # email is stored as form_data.username to comply with OAuth2 specification of needing username and password fields.
     db_user = authenticate_user(session, form_data.username, form_data.password)
 
@@ -116,28 +102,17 @@ def login_for_access_token(session: Session, form_data: Annotated[OAuth2Password
     return db_token
 
 
-# Verify if refresh token is expired.
-def check_refresh_token_expiration(token: Annotated[str, Depends(oauth2_scheme)]):
-    try:
-        jwt.decode(token, JWT_REFRESH_SECRET_KEY, algorithms=[JWT_ALGORITHM])
-
-    except ExpiredSignatureError as e:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
-    except InvalidTokenError as e:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
-
-
 def get_access_token_with_refresh_token(session: Session, refresh_token_create: RefreshTokenCreate):
     token = refresh_token_create.refresh_token
 
-    # Check if refresh token expired or not.
-    check_refresh_token_expiration(token)
+    # Check if refresh token is valid (expired or not).
+    payload = jwt_decode_refresh(token)
 
     # Extract payload and see if user exists in database.
-    payload = jwt.decode(token, JWT_REFRESH_SECRET_KEY, algorithms=[JWT_ALGORITHM])
     user_id = payload["sub"]
-
-    _ = get_user_by_id(session, user_id)
+    user_db = get_user_by_id(session, user_id)
+    if not user_db:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Could not validate credentials")
 
     # Create access and refresh tokens with user id as the sub.
     token_data = {"sub": user_id}
