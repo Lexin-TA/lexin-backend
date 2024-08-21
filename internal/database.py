@@ -1,6 +1,8 @@
 import os
+from typing import Annotated
 
 from dotenv import load_dotenv
+from fastapi import Depends
 from sqlalchemy import create_engine
 from sqlmodel import Session, SQLModel
 
@@ -25,3 +27,7 @@ def get_session():
 
 def create_db_and_tables():
     SQLModel.metadata.create_all(DB_ENGINE)
+
+
+# Common dependencies.
+SessionDep = Annotated[Session, Depends(get_session)]

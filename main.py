@@ -3,12 +3,11 @@ from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, APIRouter
-from fastapi.middleware import Middleware
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
 from internal.database import create_db_and_tables
-from routers import HealthCheckRouter, UserRouter
+from routers import HealthCheckRouter, UserRouter, ChatRouter
 
 # Load Environment Variables.
 load_dotenv()
@@ -18,7 +17,7 @@ SECRET_KEY = os.getenv("SECRET_KEY")
 
 # Database Setup.
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(_: FastAPI):
     create_db_and_tables()
     yield
 
@@ -51,6 +50,7 @@ app.add_middleware(SessionMiddleware,
 default_router = APIRouter(prefix="/api/v1")
 default_router.include_router(HealthCheckRouter.router)
 default_router.include_router(UserRouter.router, tags=['user'])
+default_router.include_router(ChatRouter.router, tags=['chat'])
 
 app.include_router(default_router)
 

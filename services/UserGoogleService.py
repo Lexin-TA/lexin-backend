@@ -5,8 +5,8 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session, select
 from starlette.responses import RedirectResponse
 
-from internal.authorization import create_access_token, create_refresh_token
-from internal.authorization_google import oauth, GOOGLE_REDIRECT_URI, FRONTEND_URL
+from internal.auth import create_access_token, create_refresh_token
+from internal.auth_google import oauth, GOOGLE_REDIRECT_URI, FRONTEND_URL
 from models.UserGoogleModel import UserGoogle
 from models.UserModel import User
 
