@@ -9,7 +9,7 @@ from main import app
 from internal.database import get_session
 from models.UserModel import User
 
-BASE_TEST_URL = '/api/v1/user'
+URL_USER = '/api/v1/user'
 
 
 @pytest.fixture(name="session")
@@ -42,7 +42,7 @@ def client_fixture(session: Session):
 @pytest.fixture(name="user")
 def user_fixture(client: TestClient):
     # Create request for user registration.
-    req_url = f"{BASE_TEST_URL}/register"
+    req_url = f"{URL_USER}/register"
     req_json = {"email": "user@example.com",
                 "fullname": "string",
                 "password": "string"}
@@ -56,7 +56,7 @@ def user_fixture(client: TestClient):
 @pytest.fixture(name="login")
 def login_fixture(client: TestClient, user):
     # Create request to login.
-    req_url = f"{BASE_TEST_URL}/token"
+    req_url = f"{URL_USER}/token"
     req_data = {"username": "user@example.com",
                 "password": "string"}
     response = client.post(url=req_url, data=req_data)
@@ -68,7 +68,7 @@ def login_fixture(client: TestClient, user):
 
 def test_register(session: Session, client: TestClient):
     # Create request for user registration.
-    req_url = f"{BASE_TEST_URL}/register"
+    req_url = f"{URL_USER}/register"
     req_json = {"email": "user@example.com",
                 "fullname": "string",
                 "password": "string"}
@@ -98,7 +98,7 @@ def test_register(session: Session, client: TestClient):
 
 def test_register_invalid_email_no_at_sign(client: TestClient):
     # Create request for user registration.
-    req_url = f"{BASE_TEST_URL}/register"
+    req_url = f"{URL_USER}/register"
     req_json = {"email": "user_with_no_at_sign_example.com",
                 "fullname": "string",
                 "password": "string"}
@@ -110,7 +110,7 @@ def test_register_invalid_email_no_at_sign(client: TestClient):
 
 def test_register_invalid_email_no_period(client: TestClient):
     # Create request for user registration.
-    req_url = f"{BASE_TEST_URL}/register"
+    req_url = f"{URL_USER}/register"
     req_json = {"email": "user@example_with_no_period_com",
                 "fullname": "string",
                 "password": "string"}
@@ -122,7 +122,7 @@ def test_register_invalid_email_no_period(client: TestClient):
 
 def test_register_unique_email(user: user_fixture, client: TestClient):
     # Create request for user registration.
-    req_url = f"{BASE_TEST_URL}/register"
+    req_url = f"{URL_USER}/register"
     req_json = {"email": "user@example.com",
                 "fullname": "string",
                 "password": "string"}
@@ -134,14 +134,14 @@ def test_register_unique_email(user: user_fixture, client: TestClient):
 
 def test_login(client: TestClient):
     # Create request for user registration.
-    req_url = f"{BASE_TEST_URL}/register"
+    req_url = f"{URL_USER}/register"
     req_json = {"email": "user@example.com",
                 "fullname": "string",
                 "password": "string"}
     client.post(url=req_url, json=req_json)
 
     # Create request to login.
-    req_url = f"{BASE_TEST_URL}/token"
+    req_url = f"{URL_USER}/token"
     req_data = {"username": "user@example.com",
                 "password": "string"}
     response = client.post(url=req_url, data=req_data)
@@ -158,7 +158,7 @@ def test_login(client: TestClient):
 
 def test_login_incorrect_credentials(user: user_fixture, client: TestClient):
     # Create request to login.
-    req_url = f"{BASE_TEST_URL}/token"
+    req_url = f"{URL_USER}/token"
     req_data = {"username": "user@example.com",
                 "password": "wrong password"}
     response = client.post(url=req_url, data=req_data)
@@ -177,7 +177,7 @@ def test_read_users_me(user: user_fixture, login: login_fixture, client: TestCli
     # Create request to read users me.
     access_token = token_data["access_token"]
 
-    req_url = f"{BASE_TEST_URL}/me"
+    req_url = f"{URL_USER}/me"
     req_headers = {"Authorization": f"Bearer {access_token}"}
     response = client.get(url=req_url, headers=req_headers)
 
@@ -195,7 +195,7 @@ def test_read_users_me_invalid_token(user: user_fixture, login: login_fixture, c
     # Create request to read users me.
     access_token = "some_invalid_access_token"
 
-    req_url = f"{BASE_TEST_URL}/me"
+    req_url = f"{URL_USER}/me"
     req_headers = {"Authorization": f"Bearer {access_token}"}
     response = client.get(url=req_url, headers=req_headers)
 
@@ -209,7 +209,7 @@ def test_read_users_me_invalid_token_no_user_id_payload(user: user_fixture, logi
     access_token = create_access_token(data=token_data_no_sub)
 
     # Create request to read users me.
-    req_url = f"{BASE_TEST_URL}/me"
+    req_url = f"{URL_USER}/me"
     req_headers = {"Authorization": f"Bearer {access_token}"}
     response = client.get(url=req_url, headers=req_headers)
 
@@ -223,7 +223,7 @@ def test_read_users_me_invalid_token_no_user_id_found(user: user_fixture, login:
     access_token = create_access_token(data=token_data_invalid_user_id)
 
     # Create request to read users me.
-    req_url = f"{BASE_TEST_URL}/me"
+    req_url = f"{URL_USER}/me"
     req_headers = {"Authorization": f"Bearer {access_token}"}
     response = client.get(url=req_url, headers=req_headers)
 
@@ -235,7 +235,7 @@ def test_refresh_access_token(user: user_fixture, login: login_fixture, client: 
     refresh_token = login["refresh_token"]
 
     # Create request to read users me.
-    req_url = f"{BASE_TEST_URL}/refresh"
+    req_url = f"{URL_USER}/refresh"
     req_json = {"refresh_token": refresh_token}
     response = client.post(url=req_url, json=req_json)
 
@@ -255,7 +255,7 @@ def test_refresh_access_token_expired_refresh_token(user: user_fixture, login: l
     refresh_token = jwt.encode(token_data_expired, JWT_REFRESH_SECRET_KEY, algorithm=JWT_ALGORITHM)
 
     # Create request to read users me.
-    req_url = f"{BASE_TEST_URL}/refresh"
+    req_url = f"{URL_USER}/refresh"
     req_json = {"refresh_token": refresh_token}
     response = client.post(url=req_url, json=req_json)
 
@@ -268,7 +268,7 @@ def test_refresh_access_token_invalid_refresh_token(user: user_fixture, login: l
     refresh_token = "some_invalid_refresh_token"
 
     # Create request to read users me.
-    req_url = f"{BASE_TEST_URL}/refresh"
+    req_url = f"{URL_USER}/refresh"
     req_json = {"refresh_token": refresh_token}
     response = client.post(url=req_url, json=req_json)
 
