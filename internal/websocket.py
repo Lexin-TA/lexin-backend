@@ -9,8 +9,8 @@ class WebSocketManager:
         Example of active_connections structure
 
         {
-            chat_room_id_1: [websocket_from_frontend_1, websocket_from_rag],
-            chat_room_id_2: [websocket_from_frontend_2, websocket_from_rag]
+            chat_room_id_1: [user_id_1_websocket_1, user_id_1_websocket_2],
+            chat_room_id_2: [user_id_2_websocket_1, user_id_2_websocket_1]
         }
         """
         self.active_connections: Dict[int, List[WebSocket]] = {}

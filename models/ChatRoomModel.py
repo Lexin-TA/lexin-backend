@@ -31,4 +31,4 @@ class ChatRoomCreate(ChatRoomBase):
 
 
 class ChatRoomRead(ChatRoomBase):
-    pass
+    id: int
