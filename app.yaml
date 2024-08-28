@@ -1,5 +1,5 @@
 # Specify service name.
-service : default
+service : backend
 
 # Specify runtime environment.
 runtime: python
