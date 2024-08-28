@@ -1,5 +1,5 @@
 # Specify service name.
-service : lexin-backend
+service : default
 
 # Specify runtime environment.
 runtime: python
