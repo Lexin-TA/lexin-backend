@@ -1,0 +1,19 @@
+# Specify service name.
+service : lexin-backend
+
+# Specify runtime environment.
+runtime: python312
+
+# Specify flexible environment to enable websockets.
+env: flex
+
+# Specify command to start the application.
+entrypoint: gunicorn -w 4 -k uvicorn.workers.UvicornWorker main:app
+
+# Set environment variables.
+env_variables:
+  DB_USER: $DB_USER
+  DB_PASS: $DB_PASS
+  DB_PORT: $DB_PORT
+  DB_NAME: $DB_NAME
+  DB_HOST: $DB_HOST

@@ -1,0 +1,50 @@
+name: Deployment CI-CD
+
+on:
+  push:
+    branches:
+      - main
+      - staging
+      - deployment
+
+jobs:
+  deployment:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Install Python 3
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: GCP authentication
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: '${{ secrets.SERVICE_API_KEY }}'
+
+    - name: Set database credentials to app.yaml
+      uses: 73h/gae-app-yaml-replace-env-variables@v0.3
+      env:
+        DB_USER: ${{ secrets.DB_USER }}
+        DB_PASS: ${{ secrets.DB_PASS }}
+        DB_PORT: ${{ secrets.DB_PORT }}
+        DB_NAME: ${{ secrets.DB_NAME }}
+        DB_HOST: ${{ secrets.DB_HOST }}
+      with:
+        app_yaml_path: "app.yaml"
+
+    - name: Set up cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+      with:
+        version: '>= 363.0.0'
+
+    - name: Use gcloud to deploy to service instance
+      run: gcloud app deploy app.yaml --quiet
