@@ -76,6 +76,12 @@ jobs:
     - name: Set database credentials to app.yaml
       uses: 73h/gae-app-yaml-replace-env-variables@v0.3
       env:
+        DB_USER: ${{ secrets.DB_USER }}
+        DB_PASS: ${{ secrets.DB_PASS }}
+        DB_PORT: ${{ secrets.DB_PORT }}
+        DB_NAME: ${{ secrets.DB_NAME }}
+        DB_HOST: ${{ secrets.DB_HOST }}
+
         SECRET_KEY: ${{ secrets.SECRET_KEY }}
 
         JWT_ACCESS_SECRET_KEY: ${{ secrets.JWT_ACCESS_SECRET_KEY }}
