@@ -2,7 +2,11 @@
 service : lexin-backend
 
 # Specify runtime environment.
-runtime: python312
+runtime: python
+
+# Use ubuntu22 with latest python version.
+runtime_config:
+    operating_system: "ubuntu22"
 
 # Specify flexible environment to enable websockets.
 env: flex
