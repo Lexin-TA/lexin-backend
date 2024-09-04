@@ -1,4 +1,5 @@
 import io
+import json
 import os
 
 from dotenv import load_dotenv
@@ -8,7 +9,11 @@ from google.cloud import storage
 # Load Environment Variables.
 load_dotenv()
 
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "GOOGLE_APPLICATION_CREDENTIALS.json"
+if os.path.isfile("GOOGLE_APPLICATION_CREDENTIALS.json"):
+    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "GOOGLE_APPLICATION_CREDENTIALS.json"
+else:
+    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "../GOOGLE_APPLICATION_CREDENTIALS.json"
+
 GOOGLE_CLOUD_STORAGE_URI = os.getenv('GOOGLE_CLOUD_STORAGE_URI')
 GOOGLE_BUCKET_NAME = os.getenv('GOOGLE_BUCKET_NAME')
 

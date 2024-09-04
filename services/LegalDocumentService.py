@@ -140,8 +140,8 @@ def get_search_legal_document(es_client: ESClientDep, query: str):
         }
     )
 
-    result = {
-        "result": es_response["hits"]["hits"]
+    es_hits = {
+        "es_hits": es_response["hits"]["hits"]
     }
 
-    return result
+    return es_hits

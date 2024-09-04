@@ -39,35 +39,41 @@ async def get_websocket_endpoint(
 
     try:
         while True:
-            # Receive message json from frontend service and save user prompt chat message.
-            message_json = await websocket.receive_json()
-
-            chat_message_create = ChatMessageCreate(**message_json)
-            _ = create_chat_message(session, chat_message_create, chat_room_id)
+            # Receive question string from frontend service.
+            user_question_dict = await websocket.receive_json()
+            user_question_str = user_question_dict["message"]
 
             # Search legal documents with the user prompt.
-            es_result = get_search_legal_document(es_client, chat_message_create.message)
-            await manager.broadcast(es_result, chat_room_id)
+            es_hits_dict = get_search_legal_document(es_client, user_question_str)
+            es_hits = es_hits_dict["es_hits"]
 
-            # Send user prompt to RAG inference endpoint and save rag inference chat message.
-            response_json = await get_rag_inference_endpoint(message_json)
+            # Send user prompt to RAG inference endpoint.
+            rag_answer_dict = await get_rag_inference_endpoint(user_question_dict)
+            rag_answer_str = rag_answer_dict["message"]
 
-            chat_message_create = ChatMessageCreate(**response_json)
+            # Save user question and rag answer to database.
+            chat_message_create = ChatMessageCreate(question=user_question_str,
+                                                    answer=rag_answer_str)
             _ = create_chat_message(session, chat_message_create, chat_room_id)
 
             # Broadcast message json to frontend (in case of multiple tabs in browser).
-            await manager.broadcast(message_json, chat_room_id)
+            response_json = {
+                "es_result": es_hits,
+                "rag_result": rag_answer_str
+            }
+            await manager.broadcast(response_json, chat_room_id)
+
     except WebSocketDisconnect:
         manager.disconnect(chat_room_id)
 
 
 # Send user prompt to RAG inference endpoint.
-async def get_rag_inference_endpoint(message_json: dict):
+async def get_rag_inference_endpoint(question: dict):
     url = RAG_URL
 
     async with httpx.AsyncClient() as client:
         try:
-            response = await client.post(url, json=message_json)
+            response = await client.post(url, json=question)
             response_data = response.json()
 
             return response_data
@@ -165,7 +171,8 @@ def get_delete_chat_room_by_id(session: Session, token_payload: JWTDecodeDep, ch
 
 # Create chat message inside a chat room.
 def create_chat_message(session: Session, chat_message_create: ChatMessageCreate, chat_room_id: int) -> ChatMessage:
-    db_chat_message = ChatMessage(message=chat_message_create.message,
+    db_chat_message = ChatMessage(question=chat_message_create.question,
+                                  answer=chat_message_create.answer,
                                   chat_room_id=chat_room_id)
 
     try:
