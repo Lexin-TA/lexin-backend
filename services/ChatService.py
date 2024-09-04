@@ -8,10 +8,11 @@ from sqlmodel import Session, select
 from fastapi import WebSocket, WebSocketDisconnect, HTTPException, status, WebSocketException
 
 from internal.auth import JWTDecodeDep, jwt_decode_access
+from internal.elastic import ESClientDep
 from internal.websocket import WebSocketManager
 from models.ChatMessageModel import ChatMessageCreate, ChatMessage
 from models.ChatRoomModel import ChatRoomCreate, ChatRoom
-
+from services.LegalDocumentService import get_search_legal_document
 
 # Load Environment Variables.
 load_dotenv()
@@ -23,7 +24,7 @@ manager = WebSocketManager()
 
 # Websocket endpoint for generative search chat with RAG endpoint.
 async def get_websocket_endpoint(
-        session: Session, websocket: WebSocket, token: str, chat_room_id: int
+        session: Session, websocket: WebSocket, es_client: ESClientDep, token: str, chat_room_id: int
 ):
     # Check if chat_room exists and current user is owner of chat room.
     token_payload = jwt_decode_access(token)
@@ -43,6 +44,10 @@ async def get_websocket_endpoint(
 
             chat_message_create = ChatMessageCreate(**message_json)
             _ = create_chat_message(session, chat_message_create, chat_room_id)
+
+            # Search legal documents with the user prompt.
+            es_result = get_search_legal_document(es_client, chat_message_create.message)
+            await manager.broadcast(es_result, chat_room_id)
 
             # Send user prompt to RAG inference endpoint and save rag inference chat message.
             response_json = await get_rag_inference_endpoint(message_json)
