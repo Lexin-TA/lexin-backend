@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
 from internal.database import create_db_and_tables
-from routers import HealthCheckRouter, UserRouter, ChatRouter
+from routers import HealthCheckRouter, UserRouter, ChatRouter, LegalDocumentRouter
 
 # Load Environment Variables.
 load_dotenv()
@@ -51,6 +51,7 @@ default_router = APIRouter(prefix="/api/v1")
 default_router.include_router(HealthCheckRouter.router)
 default_router.include_router(UserRouter.router, tags=['user'])
 default_router.include_router(ChatRouter.router, tags=['chat'])
+default_router.include_router(LegalDocumentRouter.router, tags=['legal_document'])
 
 app.include_router(default_router)
 

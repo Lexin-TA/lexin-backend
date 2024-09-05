@@ -114,6 +114,7 @@ def test_create_chat_room(session: Session, client: TestClient, user: user_fixtu
     assert db_chat_room.tittle == data["tittle"]
     assert db_chat_room.user_id == user_id
 
+
 def test_read_chat_room_by_user_id(
         session: Session, client: TestClient, login: login_fixture, chat_room: chat_room_fixture
 ):
@@ -132,7 +133,6 @@ def test_read_chat_room_by_user_id(
     assert len(data) == 1
     assert data[0]["id"] == chat_room['id']
     assert data[0]["tittle"] == chat_room["tittle"]
-
 
 
 def test_delete_chat_room(session: Session, client: TestClient, login: login_fixture, chat_room: chat_room_fixture):
@@ -176,8 +176,10 @@ def test_websocket_endpoint(session: Session, client: TestClient, login: login_f
     db_chat_messages = db_chat_room.chat_messages
 
     # Testing assertions.
-    assert response_json["message"] == message_json["message"]
-    assert len(db_chat_messages) == 2
+    assert response_json["es_result"] is not None
+    assert response_json["rag_result"] is not None
+
+    assert len(db_chat_messages) == 1
 
 
 def test_read_chat_room_messages(
