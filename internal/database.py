@@ -18,6 +18,8 @@ DB_NAME = os.getenv('DB_NAME')
 DB_URL = f"postgresql://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 DB_ENGINE = create_engine(DB_URL, echo=True)
 
+SQLModel.metadata.create_all(DB_ENGINE, checkfirst=True)
+
 
 # Database Session and Table Creation.
 def get_session():
