@@ -26,6 +26,12 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
 
+    - name: Create Google Application Credentials json
+      uses: jsdaniell/create-json@1.1.2
+      with:
+        name: "GOOGLE_APPLICATION_CREDENTIALS.json"
+        json: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
+
     - name: Run unit tests and coverage
       run: |
         coverage run --omit="main.py,internal/**,**/__init__.py,**/tests/**" -m pytest ./
