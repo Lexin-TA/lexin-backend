@@ -26,7 +26,7 @@ def get_session():
 
 
 def create_db_and_tables():
-    SQLModel.metadata.create_all(DB_ENGINE)
+    SQLModel.metadata.create_all(DB_ENGINE, checkfirst=True)
 
 
 # Common dependencies.
