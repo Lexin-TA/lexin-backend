@@ -7,8 +7,7 @@ from models.ChatRoomModel import ChatRoom
 
 # Base model.
 class ChatMessageBase(SQLModel):
-    question: str
-    answer: str
+    message: str
 
 
 # Database model used for tables in the db.
