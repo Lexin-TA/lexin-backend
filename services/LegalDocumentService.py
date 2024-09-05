@@ -109,18 +109,19 @@ def get_download_legal_document(es_client: ESClientDep, view_mode: bool, documen
         raise HTTPException(status_code=404, detail="Resource URL not found")
 
     # Download the file from GCS
+    # url splits: ['https:', '', 'storage.cloud.google.com', 'lexin-ta.appspot.com', 'legal_document', 'some_file.pdf']
     url_splits = gcs_url.split("/")
     blob_name = "/".join(url_splits[4:])
+    blob_file_name = url_splits[-1]
 
     downloaded_file = download_gcs_file(blob_name)
-    downloaded_file_name = elastic_response["_source"]["tittle"]
 
     if view_mode:
         # Select header to view the pdf file.
-        header = {"Content-Disposition": f"inline; filename={downloaded_file_name}"}
+        header = {"Content-Disposition": f"inline; filename={blob_file_name}"}
     else:
         # Select header to download the pdf file.
-        header = {"Content-Disposition": f"attachment; filename={downloaded_file_name}"}
+        header = {"Content-Disposition": f"attachment; filename={blob_file_name}"}
 
     return StreamingResponse(
         downloaded_file,
