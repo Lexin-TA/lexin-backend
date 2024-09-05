@@ -13,6 +13,7 @@ from models.LegalDocumentModel import LegalDocumentCreate
 load_dotenv()
 
 GOOGLE_BUCKET_LEGAL_DOCUMENT_FOLDER_NAME = os.getenv('GOOGLE_BUCKET_LEGAL_DOCUMENT_FOLDER_NAME')
+ELASTICSEARCH_LEGAL_DOCUMENT_INDEX = os.getenv('ELASTICSEARCH_LEGAL_DOCUMENT_INDEX')
 
 
 def extract_text_pdf(file: UploadFile) -> str:
@@ -33,10 +34,10 @@ def index_legal_document(es_client: ESClientDep, document_data: dict):
 
     # Check if a document with the same title already exists
     search_result = es_client.search(
-        index="documents",
+        index=ELASTICSEARCH_LEGAL_DOCUMENT_INDEX,
         query={
             "match": {
-                "title": legal_document_create.tittle
+                "title": legal_document_create.title
             }
         }
     )
@@ -46,7 +47,7 @@ def index_legal_document(es_client: ESClientDep, document_data: dict):
         raise HTTPException(status_code=400, detail="A document with this title already exists.")
 
     # Index the document with an auto-generated ID
-    es_response = es_client.index(index="legal_document", document=document_data)
+    es_response = es_client.index(index=ELASTICSEARCH_LEGAL_DOCUMENT_INDEX, document=document_data)
 
     result = {
         "es_result": es_response["result"],
@@ -79,7 +80,7 @@ def get_upload_legal_document(es_client: ESClientDep, file: UploadFile):
 
     # Index the extracted text and GCS URL into Elasticsearch
     document_data = {
-        "tittle": file.filename,
+        "title": file.filename,
         "content": pdf_text,
         "resource_url": gcs_url
     }
@@ -96,7 +97,7 @@ def get_download_legal_document(es_client: ESClientDep, view_mode: bool, documen
     """Download the original PDF from Google Cloud Storage."""
 
     # Retrieve the document from Elasticsearch.
-    elastic_response = es_client.get(index="legal_document", id=document_id)
+    elastic_response = es_client.get(index=ELASTICSEARCH_LEGAL_DOCUMENT_INDEX, id=document_id)
     document = elastic_response["_source"]
 
     # Check if the document exists
@@ -133,7 +134,7 @@ def get_download_legal_document(es_client: ESClientDep, view_mode: bool, documen
 def get_search_legal_document(es_client: ESClientDep, query: str):
     """Search documents in Elasticsearch."""
     es_response = es_client.search(
-        index="legal_document",
+        index=ELASTICSEARCH_LEGAL_DOCUMENT_INDEX,
         query={
             "match": {
                 "content": query

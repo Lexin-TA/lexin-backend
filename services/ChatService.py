@@ -87,11 +87,11 @@ async def get_rag_inference_endpoint(question: dict):
             return {"message": f"Error response from external API {str(exc)}"}
 
 
-# Create chat room with the user's initial prompt as the tittle.
+# Create chat room with the user's initial prompt as the title.
 def get_create_chat_room(
         session: Session, token_payload: JWTDecodeDep, chat_room_create: ChatRoomCreate
 ) -> ChatRoom:
-    db_chat_room = ChatRoom(tittle=chat_room_create.tittle,
+    db_chat_room = ChatRoom(title=chat_room_create.title,
                             user_id=token_payload.get("sub"))
 
     try:

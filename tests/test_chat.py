@@ -78,7 +78,7 @@ def chat_room_fixture(client: TestClient, login):
     # Create request for chat room creation.
     req_url = f"{URL_CHAT}/chat-room"
     req_headers = {"Authorization": f"Bearer {access_token}"}
-    req_json = {"tittle": "some initial user prompt."}
+    req_json = {"title": "some initial user prompt."}
     response = client.post(url=req_url, headers=req_headers, json=req_json)
 
     chat_room_data = response.json()
@@ -96,7 +96,7 @@ def test_create_chat_room(session: Session, client: TestClient, user: user_fixtu
     # Create request for chat room creation.
     req_url = f"{URL_CHAT}/chat-room"
     req_headers = {"Authorization": f"Bearer {access_token}"}
-    req_json = {"tittle": "some initial user prompt."}
+    req_json = {"title": "some initial user prompt."}
     response = client.post(url=req_url, headers=req_headers, json=req_json)
 
     data = response.json()
@@ -108,10 +108,10 @@ def test_create_chat_room(session: Session, client: TestClient, user: user_fixtu
     assert response.status_code == 200
     assert len(data) == 2
     assert data["id"] is not None
-    assert data["tittle"] == req_json["tittle"]
+    assert data["title"] == req_json["title"]
 
     assert db_chat_room.id is not None
-    assert db_chat_room.tittle == data["tittle"]
+    assert db_chat_room.title == data["title"]
     assert db_chat_room.user_id == user_id
 
 
@@ -132,7 +132,7 @@ def test_read_chat_room_by_user_id(
     assert response.status_code == 200
     assert len(data) == 1
     assert data[0]["id"] == chat_room['id']
-    assert data[0]["tittle"] == chat_room["tittle"]
+    assert data[0]["title"] == chat_room["title"]
 
 
 def test_delete_chat_room(session: Session, client: TestClient, login: login_fixture, chat_room: chat_room_fixture):

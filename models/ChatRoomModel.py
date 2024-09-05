@@ -7,7 +7,7 @@ from models.UserModel import User
 
 # Base model.
 class ChatRoomBase(SQLModel):
-    tittle: str
+    title: str
 
 
 # Database model used for tables in the db.
