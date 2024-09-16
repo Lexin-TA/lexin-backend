@@ -1,5 +1,8 @@
+import io
 import json
 import os
+import zipfile
+from typing import BinaryIO, IO
 
 import fitz
 from dotenv import load_dotenv
@@ -22,9 +25,9 @@ ELASTICSEARCH_LEGAL_DOCUMENT_INDEX = os.getenv('ELASTICSEARCH_LEGAL_DOCUMENT_IND
 ELASTICSEARCH_LEGAL_DOCUMENT_MAPPINGS = "ELASTICSEARCH_LEGAL_DOCUMENT_MAPPINGS.json"
 
 
-def extract_text_pdf(file: UploadFile) -> str:
+def extract_text_pdf(file: IO[bytes]) -> str:
     """Extracts text from a PDF file using PyMuPDF."""
-    pdf_data = file.file.read()
+    pdf_data = file.read()
     pdf_document = fitz.open(stream=pdf_data, filetype="pdf")
 
     text = ""
@@ -74,6 +77,61 @@ def index_legal_document(es_client: ESClientDep, document_data: dict):
     return result
 
 
+def get_upload_bulk_legal_document(es_client: ESClientDep, file: UploadFile):
+    """Upload a PDF file, extract text, and index it."""
+
+    # Check file type.
+    if file.content_type != "application/zip":
+        raise HTTPException(status_code=400, detail="Only zip files are allowed.")
+
+    with zipfile.ZipFile(file.file, 'r') as zip_file:
+        if "metadata.json" not in zip_file.namelist():
+            raise HTTPException(status_code=400, detail="metadata.json not found.")
+
+        with zip_file.open("metadata.json") as extracted_file:
+            metadata_content = extracted_file.read()
+            metadata_list = json.loads(metadata_content)
+
+        for metadata in metadata_list:
+            filename = metadata["filename"]
+
+            with zip_file.open(filename) as extracted_file:
+                upload_bulk_legal_document_helper(es_client, extracted_file, metadata)
+
+
+def upload_bulk_legal_document_helper(
+        es_client: ESClientDep, extracted_file: IO[bytes], metadata: dict
+):
+    filename = metadata['filename']
+
+    # Upload the PDF to Google Cloud Storage
+    blob_name = f"{GOOGLE_BUCKET_LEGAL_DOCUMENT_FOLDER_NAME}/{filename}"
+    gcs_url = upload_gcs_file(extracted_file, blob_name)
+
+    # Reset the pointer to the beginning
+    extracted_file.seek(0)
+
+    # Extract text from the PDF
+    pdf_text = extract_text_pdf(extracted_file)
+
+    # Index the extracted text and GCS URL into Elasticsearch
+    document_data = {
+        "content": pdf_text,
+        "resource_url": gcs_url
+    }
+
+    # Update document data with the metadata.
+    document_data.update(metadata)
+
+    # Send index document request.
+    es_response = index_legal_document(es_client, document_data)
+
+    # Prepare return dictionary.
+    es_response.update({"resource_url": gcs_url})
+
+    return es_response
+
+
 def get_upload_legal_document(es_client: ESClientDep, file: UploadFile):
     """Upload a PDF file, extract text, and index it."""
 
@@ -83,7 +141,7 @@ def get_upload_legal_document(es_client: ESClientDep, file: UploadFile):
 
     # Upload the PDF to Google Cloud Storage
     blob_name = f"{GOOGLE_BUCKET_LEGAL_DOCUMENT_FOLDER_NAME}/{file.filename}"
-    gcs_url = upload_gcs_file(file, blob_name)
+    gcs_url = upload_gcs_file(file.file, blob_name)
 
     # At this point, the file pointer is at the end of the file
     # This is because the file is read first, then uploaded to google cloud storage.
@@ -92,7 +150,7 @@ def get_upload_legal_document(es_client: ESClientDep, file: UploadFile):
     file.file.seek(0)
 
     # Extract text from the PDF
-    pdf_text = extract_text_pdf(file)
+    pdf_text = extract_text_pdf(file.file)
 
     # Index the extracted text and GCS URL into Elasticsearch
     document_data = {
