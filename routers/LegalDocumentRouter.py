@@ -1,7 +1,10 @@
 from fastapi import APIRouter, UploadFile
 from starlette.responses import StreamingResponse
 
+from internal.auth import JWTDecodeDep
+from internal.database import SessionDep
 from internal.elastic import ESClientDep
+from models.LegalDocumentBookmarkModel import LegalDocumentBookmarkRead
 from services import LegalDocumentService
 
 router = APIRouter(prefix="/legal-document")
@@ -36,3 +39,17 @@ def search_legal_document(es_client: ESClientDep, query: str) -> dict:
     search_result = LegalDocumentService.get_search_legal_document(es_client, query)
 
     return search_result
+
+
+@router.post("/bookmark", response_model=LegalDocumentBookmarkRead)
+def create_legal_document_bookmark(*, session: SessionDep, token_payload: JWTDecodeDep, document_id: str):
+    bookmark_result = LegalDocumentService.get_create_legal_document_bookmark(session, token_payload, document_id)
+
+    return bookmark_result
+
+
+@router.get("/bookmark", response_model=list[LegalDocumentBookmarkRead])
+def read_legal_document_bookmark(*, session: SessionDep, token_payload: JWTDecodeDep):
+    db_legal_document_bookmarks = LegalDocumentService.get_read_legal_document_bookmark(session, token_payload)
+
+    return db_legal_document_bookmarks

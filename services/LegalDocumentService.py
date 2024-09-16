@@ -4,9 +4,13 @@ import fitz
 from dotenv import load_dotenv
 from fastapi import UploadFile, HTTPException
 from fastapi.responses import StreamingResponse
+from sqlalchemy.exc import SQLAlchemyError
+from sqlmodel import Session, select
 
+from internal.auth import JWTDecodeDep
 from internal.elastic import ESClientDep
 from internal.google_cloud_storage import upload_gcs_file, download_gcs_file
+from models.LegalDocumentBookmarkModel import LegalDocumentBookmark
 from models.LegalDocumentModel import LegalDocumentCreate
 
 # Load Environment Variables.
@@ -147,3 +151,32 @@ def get_search_legal_document(es_client: ESClientDep, query: str):
     }
 
     return es_hits
+
+
+def get_create_legal_document_bookmark(session: Session, token_payload: JWTDecodeDep, document_id: str):
+    """Bookmark the user's documents"""
+    user_id = token_payload.get("sub")
+    db_legal_document_bookmark = LegalDocumentBookmark(user_id=user_id,
+                                                       document_id=document_id)
+
+    try:
+        session.add(db_legal_document_bookmark)
+        session.commit()
+        session.refresh(db_legal_document_bookmark)
+    except SQLAlchemyError as e:
+        raise HTTPException(status_code=422, detail=str(e.orig))
+
+    return db_legal_document_bookmark
+
+
+def get_read_legal_document_bookmark(session: Session, token_payload: JWTDecodeDep):
+    user_id = token_payload.get("sub")
+
+    try:
+        statement = select(LegalDocumentBookmark).where(LegalDocumentBookmark.user_id == user_id)
+        result = session.exec(statement)
+        db_chat_rooms = result.all()
+    except SQLAlchemyError as e:
+        raise HTTPException(status_code=422, detail=str(e.orig))
+
+    return db_chat_rooms
