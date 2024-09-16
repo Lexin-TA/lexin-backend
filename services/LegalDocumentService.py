@@ -1,3 +1,4 @@
+import json
 import os
 
 import fitz
@@ -18,6 +19,7 @@ load_dotenv()
 
 GOOGLE_BUCKET_LEGAL_DOCUMENT_FOLDER_NAME = os.getenv('GOOGLE_BUCKET_LEGAL_DOCUMENT_FOLDER_NAME')
 ELASTICSEARCH_LEGAL_DOCUMENT_INDEX = os.getenv('ELASTICSEARCH_LEGAL_DOCUMENT_INDEX')
+ELASTICSEARCH_LEGAL_DOCUMENT_MAPPINGS = "ELASTICSEARCH_LEGAL_DOCUMENT_MAPPINGS.json"
 
 
 def extract_text_pdf(file: UploadFile) -> str:
@@ -30,6 +32,16 @@ def extract_text_pdf(file: UploadFile) -> str:
         text += page.get_text()
 
     return text
+
+
+def get_create_legal_document_mappings(es_client: ESClientDep):
+    """Create initial index mappings of legal documents."""
+    with open(ELASTICSEARCH_LEGAL_DOCUMENT_MAPPINGS, 'r') as file:
+        mappings = json.load(file)
+
+    es_response = es_client.indices.create(index=ELASTICSEARCH_LEGAL_DOCUMENT_INDEX, body=mappings)
+
+    return es_response
 
 
 def index_legal_document(es_client: ESClientDep, document_data: dict):

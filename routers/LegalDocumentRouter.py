@@ -10,6 +10,13 @@ from services import LegalDocumentService
 router = APIRouter(prefix="/legal-document")
 
 
+@router.post("/create-mapping")
+def create_legal_document_mappings(es_client: ESClientDep,):
+    mapping_result = LegalDocumentService.get_create_legal_document_mappings(es_client)
+
+    return mapping_result
+
+
 @router.post("/upload")
 def upload_legal_document(es_client: ESClientDep, file: UploadFile) -> dict:
     upload_result = LegalDocumentService.get_upload_legal_document(es_client, file)
