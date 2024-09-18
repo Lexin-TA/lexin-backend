@@ -17,6 +17,13 @@ def create_legal_document_mappings(es_client: ESClientDep,):
     return mapping_result
 
 
+@router.post("/upload-bulk")
+def upload_bulk_legal_document(es_client: ESClientDep, file: UploadFile) -> dict:
+    upload_bulk_result = LegalDocumentService.get_upload_bulk_legal_document(es_client, file)
+
+    return upload_bulk_result
+
+
 @router.post("/upload")
 def upload_legal_document(es_client: ESClientDep, file: UploadFile) -> dict:
     upload_result = LegalDocumentService.get_upload_legal_document(es_client, file)
