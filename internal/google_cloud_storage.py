@@ -4,7 +4,7 @@ import os
 from typing import IO
 
 from dotenv import load_dotenv
-from fastapi import UploadFile
+from fastapi import UploadFile, HTTPException
 from google.cloud import storage
 
 # Load Environment Variables.
@@ -25,8 +25,13 @@ bucket = client.get_bucket(GOOGLE_BUCKET_NAME)
 
 def upload_gcs_file(file: IO[bytes], blob_name: str) -> str:
     blob = bucket.blob(blob_name)
-    blob.upload_from_file(file)
 
+    # Check if file is already in google cloud storage.
+    if blob.exists():
+        raise HTTPException(status_code=400, detail="A file with this name already exists in storage.")
+
+    # Upload file to google cloud storage
+    blob.upload_from_file(file)
     file_url = f"{GOOGLE_CLOUD_STORAGE_URI}/{GOOGLE_BUCKET_NAME}/{blob_name}"
 
     return file_url

@@ -22,7 +22,7 @@ load_dotenv()
 
 GOOGLE_BUCKET_LEGAL_DOCUMENT_FOLDER_NAME = os.getenv('GOOGLE_BUCKET_LEGAL_DOCUMENT_FOLDER_NAME')
 ELASTICSEARCH_LEGAL_DOCUMENT_INDEX = os.getenv('ELASTICSEARCH_LEGAL_DOCUMENT_INDEX')
-METADATA_FILENAME = "metadata.json"
+LEGAL_DOCUMENT_METADATA_JSON_FILENAME = "metadata.json"
 
 
 def extract_text_pdf(file: IO[bytes]) -> str:
@@ -55,9 +55,12 @@ def index_legal_document(es_client: ESClientDep, document_data: dict):
     search_result = es_client.search(
         index=ELASTICSEARCH_LEGAL_DOCUMENT_INDEX,
         query={
-            "term": {
-                "filename.keyword": {
-                    "value": legal_document_create.filename
+            "constant_score": {
+                "filter": {
+                    "term": {
+                        "filename": legal_document_create.filename
+                    }
+
                 }
             }
         }
@@ -65,7 +68,7 @@ def index_legal_document(es_client: ESClientDep, document_data: dict):
 
     # If a document with this title exists, raise an error
     if search_result["hits"]["total"]["value"] > 0:
-        raise HTTPException(status_code=400, detail="A document with this filename already exists.")
+        raise HTTPException(status_code=400, detail="An index with this filename already exists.")
 
     # Index the document with an auto-generated ID
     es_response = es_client.index(index=ELASTICSEARCH_LEGAL_DOCUMENT_INDEX, document=document_data)
@@ -78,8 +81,48 @@ def index_legal_document(es_client: ESClientDep, document_data: dict):
     return result
 
 
-def get_upload_bulk_legal_document(es_client: ESClientDep, file: UploadFile):
-    """Bulk upload PDF files to google cloud storage, extract text, and index it to elasticsearch."""
+def get_upload_legal_document(es_client: ESClientDep, file: UploadFile):
+    """
+    Parse the zip file containing legal document pdfs and metadata json, so it can be uploaded to the system.
+
+    Example of the file structure inside the zip file would be as follows:
+        - metadata.json
+        - uu-no-53-tahun-2024.pdf
+        - uu-no-36-tahun-2024.pdf
+        ...
+
+    Example of the metadata.json structure would contain information of the pdf files as follows:
+    [
+        {
+            "title": "Undang-undang Nomor 53 Tahun 2024 Tentang Kota Bukittinggi di Provinsi Sumatera Barat",
+            "jenis_bentuk_peraturan": "UNDANG-UNDANG",
+            "pemrakarsa": "PEMERINTAH PUSAT",
+            "nomor": 53,
+            "tahun": 2024,
+            "tentang": "KOTA BUKITTINGGI DI PROVINSI SUMATERA BARAT",
+            "tempat_penetapan": "Jakarta",
+            "ditetapkan_tanggal": "01 Januari 1970",
+            "status": "Berlaku",
+            "reference_url": "https://peraturan.go.id/files/uu-no-53-tahun-2024.pdf",
+            "filename": "uu-no-53-tahun-2024.pdf"
+        },
+        {
+            "title": "Undang-undang Nomor 36 Tahun 2024 Tentang Kabupaten Lampung Utara di Provinsi Lampung",
+            "jenis_bentuk_peraturan": "UNDANG-UNDANG",
+            "pemrakarsa": "PEMERINTAH PUSAT",
+            "nomor": 36,
+            "tahun": 2024,
+            "tentang": "KABUPATEN LAMPUNG UTARA DI PROVINSI LAMPUNG",
+            "tempat_penetapan": "Jakarta",
+            "ditetapkan_tanggal": "01 Januari 1970",
+            "status": "Berlaku",
+            "reference_url": "https://peraturan.go.id/files/uu-no-36-tahun-2024.pdf",
+            "filename": "uu-no-36-tahun-2024.pdf"
+        },
+        ...
+    ]
+
+    """
 
     # Check if file type is zip.
     content_type = file.content_type
@@ -93,63 +136,79 @@ def get_upload_bulk_legal_document(es_client: ESClientDep, file: UploadFile):
     # Read uploaded zip file.
     with zipfile.ZipFile(file.file, 'r') as zip_file:
         # Check if metadata json file exists within the zip file.
-        filename_in_zip_list = zip_file.namelist()
-        if METADATA_FILENAME not in filename_in_zip_list:
+        filenames_in_zip_list = zip_file.namelist()
+
+        if LEGAL_DOCUMENT_METADATA_JSON_FILENAME not in filenames_in_zip_list:
             raise HTTPException(status_code=400, detail="metadata.json not found.")
         else:
-            filename_in_zip_list.remove(METADATA_FILENAME)
+            filenames_in_zip_list.remove(LEGAL_DOCUMENT_METADATA_JSON_FILENAME)
 
         # Extract metadata json file contents as a dictionary.
-        with zip_file.open(METADATA_FILENAME) as extracted_file:
+        with zip_file.open(LEGAL_DOCUMENT_METADATA_JSON_FILENAME) as extracted_file:
             metadata_content = extracted_file.read()
             metadata_list = json.loads(metadata_content)
 
-        # Iterate metadata dictionary.
-        failed_upload_result = []
-        success_upload_result = []
-        filename_in_metadata_list = []
+        parse_result = parse_legal_document_and_metadata_zip(
+            es_client, zip_file, filenames_in_zip_list, metadata_list
+        )
 
-        for metadata in metadata_list:
-            filename = metadata["filename"]
-            filename_in_metadata_list.append(filename)
+    return parse_result
 
-            # Read a filename inside the zip file based on the metadata dictionary.
-            with zip_file.open(filename) as extracted_file:
-                try:
-                    # Upload legal document to google cloud storage and index to elasticsearch.
-                    upload_result = upload_bulk_legal_document_helper(es_client, extracted_file, metadata)
-                    success_upload_result.append(upload_result)
 
-                except HTTPException as e:
-                    # Append filenames that failed to upload.
-                    failed_upload_result.append({filename: str(e)})
+def parse_legal_document_and_metadata_zip(
+        es_client: ESClientDep, zip_file: zipfile, filenames_in_zip_list: list[str], metadata_list: list[dict]
+):
+    """Upload filenames that are described in the metadata into the system."""
+    failed_upload_list = []
+    successful_upload_list = []
+    filenames_in_metadata_list = []
+
+    # Iterate metadata dictionary.
+    for metadata in metadata_list:
+        filename = metadata["filename"]
+        filenames_in_metadata_list.append(filename)
+
+        # Read a filename inside the zip file based on the metadata dictionary.
+        with zip_file.open(filename) as extracted_file:
+            try:
+                # Upload legal document to google cloud storage and index to elasticsearch.
+                upload_result = upload_legal_document_helper(es_client, extracted_file, metadata)
+                successful_upload_list.append(upload_result)
+
+            except HTTPException as e:
+                # Append filenames that failed to upload.
+                failed_upload_list.append({filename: str(e)})
 
     # Prepare response for filenames with no metadata.
-    filename_in_zip_set = set(filename_in_zip_list)
-    filename_in_metadata_set = set(filename_in_metadata_list)
+    filename_in_zip_set = set(filenames_in_zip_list)
+    filename_in_metadata_set = set(filenames_in_metadata_list)
 
     filename_with_no_metadata = filename_in_zip_set.difference(filename_in_metadata_set)
     for filename in filename_with_no_metadata:
-        failed_upload_result.append({filename: "No metadata detected."})
+        failed_upload_list.append({filename: "No metadata detected."})
 
-    # Prepare bulk upload response.
-    result = {
-        "failed_upload_result": failed_upload_result,
-        "success_upload_result": success_upload_result
+    # Prepare upload response.
+    parse_result = {
+        "failed_upload": failed_upload_list,
+        "successful_upload": successful_upload_list,
     }
 
-    return result
+    return parse_result
 
 
-def upload_bulk_legal_document_helper(
+def upload_legal_document_helper(
         es_client: ESClientDep, extracted_file: IO[bytes], metadata: dict
 ):
+    """Upload PDF files to google cloud storage, extract text, and index it to elasticsearch."""
     filename = metadata['filename']
 
     # Upload the PDF to Google Cloud Storage
     blob_name = f"{GOOGLE_BUCKET_LEGAL_DOCUMENT_FOLDER_NAME}/{filename}"
     gcs_url = upload_gcs_file(extracted_file, blob_name)
 
+    # At this point, the file pointer is at the end of the file
+    # This is because the file is read first, then uploaded to google cloud storage.
+    # If we try to read again, it will return an empty string or nothing
     # Reset the pointer to the beginning
     extracted_file.seek(0)
 
@@ -176,41 +235,6 @@ def upload_bulk_legal_document_helper(
     }
 
     return upload_result
-
-
-def get_upload_legal_document(es_client: ESClientDep, file: UploadFile):
-    """Upload a PDF file, extract text, and index it."""
-
-    # Check file type.
-    if file.content_type != "application/pdf":
-        raise HTTPException(status_code=400, detail="Only PDF files are allowed.")
-
-    # Upload the PDF to Google Cloud Storage
-    blob_name = f"{GOOGLE_BUCKET_LEGAL_DOCUMENT_FOLDER_NAME}/{file.filename}"
-    gcs_url = upload_gcs_file(file.file, blob_name)
-
-    # At this point, the file pointer is at the end of the file
-    # This is because the file is read first, then uploaded to google cloud storage.
-    # If we try to read again, it will return an empty string or nothing
-    # Reset the pointer to the beginning
-    file.file.seek(0)
-
-    # Extract text from the PDF
-    pdf_text = extract_text_pdf(file.file)
-
-    # Index the extracted text and GCS URL into Elasticsearch
-    document_data = {
-        "title": file.filename,
-        "content": pdf_text,
-        "resource_url": gcs_url
-    }
-
-    es_response = index_legal_document(es_client, document_data)
-
-    # Prepare return dictionary.
-    es_response.update({"resource_url": gcs_url})
-
-    return es_response
 
 
 def get_download_legal_document(es_client: ESClientDep, view_mode: bool, document_id: str):
