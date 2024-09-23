@@ -321,6 +321,14 @@ def search_legal_document_by_id(es_client: ESClientDep, document_id_list: list[s
             "ids": {
                 "values": document_id_list
             }
+        },
+        source={
+            "excludes": [
+                "filename",
+                "content",
+                "reference_url",
+                "resource_url"
+            ]
         }
 
     )
@@ -340,6 +348,14 @@ def search_legal_document_by_content(es_client: ESClientDep, query: str) -> list
             "match": {
                 "content": query
             }
+        },
+        source={
+            "excludes": [
+                "filename",
+                "content",
+                "reference_url",
+                "resource_url"
+            ]
         }
     )
 
@@ -402,6 +418,6 @@ def get_delete_legal_document_bookmark_by_document_id(
         session.delete(db_legal_document_bookmark)
         session.commit()
     except SQLAlchemyError as e:
-        raise HTTPException(status_code=422, detail=str(e.orig))
+        raise HTTPException(status_code=422, detail=str(e))
 
     return {"ok": True}

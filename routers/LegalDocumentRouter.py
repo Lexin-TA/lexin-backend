@@ -42,7 +42,7 @@ def view_legal_document(es_client: ESClientDep, document_id: str) -> StreamingRe
 
 
 @router.get("/search")
-def search_legal_document(es_client: ESClientDep, query: str) -> dict:
+def search_legal_document(es_client: ESClientDep, query: str) -> list[dict]:
     search_result = LegalDocumentService.search_legal_document_by_content(es_client, query)
 
     return search_result
@@ -55,8 +55,19 @@ def create_legal_document_bookmark(*, session: SessionDep, token_payload: JWTDec
     return bookmark_result
 
 
-@router.get("/bookmark", response_model=list[LegalDocumentBookmarkRead])
-def read_legal_document_bookmark(*, session: SessionDep, token_payload: JWTDecodeDep):
-    db_legal_document_bookmarks = LegalDocumentService.get_read_legal_document_bookmark(session, token_payload)
+@router.get("/bookmark")
+def read_legal_document_bookmark(*, session: SessionDep, token_payload: JWTDecodeDep, es_client: ESClientDep):
+    db_legal_document_bookmarks = LegalDocumentService.get_read_legal_document_bookmark(session,
+                                                                                        token_payload,
+                                                                                        es_client)
 
     return db_legal_document_bookmarks
+
+
+@router.delete("/bookmark")
+def delete_legal_document_bookmark(*, session: SessionDep, token_payload: JWTDecodeDep, document_id: str):
+    delete_response = LegalDocumentService.get_delete_legal_document_bookmark_by_document_id(session,
+                                                                                             token_payload,
+                                                                                             document_id)
+
+    return delete_response
