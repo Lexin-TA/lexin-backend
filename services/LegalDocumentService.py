@@ -1,8 +1,7 @@
-import io
 import json
 import os
 import zipfile
-from typing import BinaryIO, IO
+from typing import IO
 
 import fitz
 from dotenv import load_dotenv
@@ -27,12 +26,15 @@ LEGAL_DOCUMENT_METADATA_JSON_FILENAME = "metadata.json"
 
 def extract_text_pdf(file: IO[bytes]) -> str:
     """Extracts text from a PDF file using PyMuPDF."""
-    pdf_data = file.read()
-    pdf_document = fitz.open(stream=pdf_data, filetype="pdf")
+    try:
+        pdf_data = file.read()
+        pdf_document = fitz.open(stream=pdf_data, filetype="pdf")
 
-    text = ""
-    for page in pdf_document:
-        text += page.get_text()
+        text = ""
+        for page in pdf_document:
+            text += page.get_text()
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=str(e))
 
     return text
 
@@ -81,7 +83,7 @@ def index_legal_document(es_client: ESClientDep, document_data: dict):
     return result
 
 
-def get_upload_legal_document(es_client: ESClientDep, file: UploadFile):
+def get_upload_legal_document(es_client: ESClientDep, file: UploadFile) -> dict:
     """
     Parse the zip file containing legal document pdfs and metadata json, so it can be uploaded to the system.
 
@@ -106,22 +108,35 @@ def get_upload_legal_document(es_client: ESClientDep, file: UploadFile):
             "reference_url": "https://peraturan.go.id/files/uu-no-53-tahun-2024.pdf",
             "filename": "uu-no-53-tahun-2024.pdf"
         },
-        {
-            "title": "Undang-undang Nomor 36 Tahun 2024 Tentang Kabupaten Lampung Utara di Provinsi Lampung",
-            "jenis_bentuk_peraturan": "UNDANG-UNDANG",
-            "pemrakarsa": "PEMERINTAH PUSAT",
-            "nomor": 36,
-            "tahun": 2024,
-            "tentang": "KABUPATEN LAMPUNG UTARA DI PROVINSI LAMPUNG",
-            "tempat_penetapan": "Jakarta",
-            "ditetapkan_tanggal": "01 Januari 1970",
-            "status": "Berlaku",
-            "reference_url": "https://peraturan.go.id/files/uu-no-36-tahun-2024.pdf",
-            "filename": "uu-no-36-tahun-2024.pdf"
-        },
         ...
     ]
 
+    Example of the return value of this function would be as follows:
+    {
+        "failed_upload": [
+            {
+              "uu4-1983.pdf": "400: A file with this name already exists in storage."
+            },
+            {
+              "uu1-1956.pdf": "400: A file with this name already exists in storage."
+            },
+            ...
+        ],
+
+        "successful_upload": [
+            {
+              "id": "5wHSHZIBIi1nR4ibIbSb",
+              "filename": "uu-no-36-tahun-2024.pdf",
+              "resource_url": "https://storage.cloud.google.com/lexin-ta.appspot.com/legal_document/uu-no-36-tahun-2024.pdf"
+            },
+            {
+              "id": "6AHSHZIBIi1nR4ibIrSD",
+              "filename": "uu-no-14-tahun-2024.pdf",
+              "resource_url": "https://storage.cloud.google.com/lexin-ta.appspot.com/legal_document/uu-no-14-tahun-2024.pdf"
+            },
+            ...
+        ]
+    }
     """
 
     # Check if file type is zip.
@@ -157,7 +172,7 @@ def get_upload_legal_document(es_client: ESClientDep, file: UploadFile):
 
 def parse_legal_document_and_metadata_zip(
         es_client: ESClientDep, zip_file: zipfile, filenames_in_zip_list: list[str], metadata_list: list[dict]
-):
+) -> dict:
     """Upload filenames that are described in the metadata into the system."""
     failed_upload_list = []
     successful_upload_list = []
@@ -198,7 +213,7 @@ def parse_legal_document_and_metadata_zip(
 
 def upload_legal_document_helper(
         es_client: ESClientDep, extracted_file: IO[bytes], metadata: dict
-):
+) -> dict:
     """Upload PDF files to google cloud storage, extract text, and index it to elasticsearch."""
     filename = metadata['filename']
 
@@ -237,7 +252,7 @@ def upload_legal_document_helper(
     return upload_result
 
 
-def get_download_legal_document(es_client: ESClientDep, view_mode: bool, document_id: str):
+def get_download_legal_document(es_client: ESClientDep, view_mode: bool, document_id: str) -> StreamingResponse:
     """Download the original PDF from Google Cloud Storage."""
 
     # Retrieve the document from Elasticsearch.
@@ -275,8 +290,50 @@ def get_download_legal_document(es_client: ESClientDep, view_mode: bool, documen
     )
 
 
-def get_search_legal_document(es_client: ESClientDep, query: str):
-    """Search documents in Elasticsearch."""
+def search_legal_document_by_id(es_client: ESClientDep, document_id_list: list[str]) -> list[dict]:
+    """Retrieve multiple legal document metadata by id list.
+
+    The return value of this function is a list of dictionaries as follows:
+    [
+        {
+            "_index": "legal_document",
+            "_id": "cgHSHZIBIi1nR4ibuLUH",
+            "_score": 1,
+            "_source": {
+                "title": "Undang-undang Nomor 24 Tahun 2019 Tentang Ekonomi Kreatif",
+                "jenis_bentuk_peraturan": "UNDANG-UNDANG",
+                "pemrakarsa": "PEMERINTAH PUSAT",
+                "nomor": "24",
+                "tahun": "2019",
+                "tentang": "EKONOMI KREATIF",
+                "tempat_penetapan": "Jakarta",
+                "ditetapkan_tanggal": "24 Oktober 2019",
+                "status": "Berlaku"
+            }
+        },
+        ...
+    ]
+    """
+    # Retrieve the documents from Elasticsearch.
+    search_result = es_client.search(
+        index=ELASTICSEARCH_LEGAL_DOCUMENT_INDEX,
+        query={
+            "ids": {
+                "values": document_id_list
+            }
+        }
+
+    )
+    document_hits = search_result["hits"]["hits"]
+
+    return document_hits
+
+
+def search_legal_document_by_content(es_client: ESClientDep, query: str) -> list[dict]:
+    """Search documents by its content field in Elasticsearch.
+
+    The return value of this function is the same as the function search_legal_document_by_id().
+    """
     es_response = es_client.search(
         index=ELASTICSEARCH_LEGAL_DOCUMENT_INDEX,
         query={
@@ -286,14 +343,14 @@ def get_search_legal_document(es_client: ESClientDep, query: str):
         }
     )
 
-    es_hits = {
-        "es_hits": es_response["hits"]["hits"]
-    }
+    es_hits = es_response["hits"]["hits"]
 
     return es_hits
 
 
-def get_create_legal_document_bookmark(session: Session, token_payload: JWTDecodeDep, document_id: str):
+def get_create_legal_document_bookmark(
+        session: Session, token_payload: JWTDecodeDep, document_id: str
+) -> LegalDocumentBookmark:
     """Bookmark the user's documents"""
     user_id = token_payload.get("sub")
     db_legal_document_bookmark = LegalDocumentBookmark(user_id=user_id,
@@ -309,14 +366,42 @@ def get_create_legal_document_bookmark(session: Session, token_payload: JWTDecod
     return db_legal_document_bookmark
 
 
-def get_read_legal_document_bookmark(session: Session, token_payload: JWTDecodeDep):
+def get_read_legal_document_bookmark(session: Session, token_payload: JWTDecodeDep, es_client: ESClientDep):
+    """View the user's legal document bookmarks."""
     user_id = token_payload.get("sub")
 
+    # Retrieve document ids from user's bookmarks.
     try:
         statement = select(LegalDocumentBookmark).where(LegalDocumentBookmark.user_id == user_id)
         result = session.exec(statement)
-        db_chat_rooms = result.all()
+        db_legal_document_bookmark = result.all()
     except SQLAlchemyError as e:
         raise HTTPException(status_code=422, detail=str(e.orig))
 
-    return db_chat_rooms
+    # Query elasticsearch using document id list.
+    document_id_list = [doc.document_id for doc in db_legal_document_bookmark]
+    document_hits = search_legal_document_by_id(es_client, document_id_list)
+
+    return document_hits
+
+
+def get_delete_legal_document_bookmark_by_document_id(
+        session: Session, token_payload: JWTDecodeDep, document_id: str
+) -> dict:
+    """Delete the user's legal document bookmark by its document id."""
+    user_id = token_payload.get("sub")
+
+    # Retrieve document ids from user's bookmarks.
+    try:
+        statement = (select(LegalDocumentBookmark)
+                     .where(LegalDocumentBookmark.user_id == user_id)
+                     .where(LegalDocumentBookmark.document_id == document_id))
+        result = session.exec(statement)
+        db_legal_document_bookmark = result.first()
+
+        session.delete(db_legal_document_bookmark)
+        session.commit()
+    except SQLAlchemyError as e:
+        raise HTTPException(status_code=422, detail=str(e.orig))
+
+    return {"ok": True}

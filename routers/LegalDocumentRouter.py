@@ -43,7 +43,7 @@ def view_legal_document(es_client: ESClientDep, document_id: str) -> StreamingRe
 
 @router.get("/search")
 def search_legal_document(es_client: ESClientDep, query: str) -> dict:
-    search_result = LegalDocumentService.get_search_legal_document(es_client, query)
+    search_result = LegalDocumentService.search_legal_document_by_content(es_client, query)
 
     return search_result
 
