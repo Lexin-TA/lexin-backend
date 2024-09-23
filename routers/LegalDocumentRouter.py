@@ -1,10 +1,20 @@
 from fastapi import APIRouter, UploadFile
 from starlette.responses import StreamingResponse
 
+from internal.auth import JWTDecodeDep
+from internal.database import SessionDep
 from internal.elastic import ESClientDep
+from models.LegalDocumentBookmarkModel import LegalDocumentBookmarkRead
 from services import LegalDocumentService
 
 router = APIRouter(prefix="/legal-document")
+
+
+@router.post("/create-mapping")
+def create_legal_document_mappings(es_client: ESClientDep,):
+    mapping_result = LegalDocumentService.get_create_legal_document_mappings(es_client)
+
+    return mapping_result
 
 
 @router.post("/upload")
@@ -32,7 +42,32 @@ def view_legal_document(es_client: ESClientDep, document_id: str) -> StreamingRe
 
 
 @router.get("/search")
-def search_legal_document(es_client: ESClientDep, query: str) -> dict:
-    search_result = LegalDocumentService.get_search_legal_document(es_client, query)
+def search_legal_document(es_client: ESClientDep, query: str) -> list[dict]:
+    search_result = LegalDocumentService.search_legal_document_by_content(es_client, query)
 
     return search_result
+
+
+@router.post("/bookmark", response_model=LegalDocumentBookmarkRead)
+def create_legal_document_bookmark(*, session: SessionDep, token_payload: JWTDecodeDep, document_id: str):
+    bookmark_result = LegalDocumentService.get_create_legal_document_bookmark(session, token_payload, document_id)
+
+    return bookmark_result
+
+
+@router.get("/bookmark")
+def read_legal_document_bookmark(*, session: SessionDep, token_payload: JWTDecodeDep, es_client: ESClientDep):
+    db_legal_document_bookmarks = LegalDocumentService.get_read_legal_document_bookmark(session,
+                                                                                        token_payload,
+                                                                                        es_client)
+
+    return db_legal_document_bookmarks
+
+
+@router.delete("/bookmark")
+def delete_legal_document_bookmark(*, session: SessionDep, token_payload: JWTDecodeDep, document_id: str):
+    delete_response = LegalDocumentService.get_delete_legal_document_bookmark_by_document_id(session,
+                                                                                             token_payload,
+                                                                                             document_id)
+
+    return delete_response

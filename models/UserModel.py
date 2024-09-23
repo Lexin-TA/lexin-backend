@@ -18,8 +18,14 @@ class User(UserBase, table=True):
     google_sub: str | None = Field(default=None, unique=True)
 
     # Relationships.
-    chat_rooms: list['ChatRoom'] = Relationship(back_populates='user',
-                                                sa_relationship_kwargs={'cascade': 'all, delete, delete-orphan'})
+    chat_rooms: list['ChatRoom'] = Relationship(
+        back_populates='user',
+        sa_relationship_kwargs={'cascade': 'all, delete, delete-orphan'}
+    )
+    legal_document_bookmarks: list['LegalDocumentBookmark'] = Relationship(
+        back_populates='user',
+        sa_relationship_kwargs={'cascade': 'all, delete, delete-orphan'}
+    )
 
 
 # Data model used for requests/responses in the application.

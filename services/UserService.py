@@ -52,15 +52,19 @@ def get_user_by_id(session: Session, user_id: int) -> User:
 
 # Verify that a user with the specified email and password exists.
 def authenticate_user(session: Session, email: str, password: str) -> User:
-    user = get_user_by_email(session, email)
-    is_password_correct = verify_password(password, user.password)
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
 
-    if (not user) or (not is_password_correct):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+    user = get_user_by_email(session, email)
+    if not user:
+        raise credentials_exception
+
+    is_password_correct = verify_password(password, user.password)
+    if not is_password_correct:
+        raise credentials_exception
 
     return user
 

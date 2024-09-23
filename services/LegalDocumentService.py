@@ -1,99 +1,258 @@
+import json
 import os
+import zipfile
+from typing import IO
 
 import fitz
 from dotenv import load_dotenv
 from fastapi import UploadFile, HTTPException
 from fastapi.responses import StreamingResponse
+from sqlalchemy.exc import SQLAlchemyError
+from sqlmodel import Session, select
 
+from internal.auth import JWTDecodeDep
 from internal.elastic import ESClientDep
 from internal.google_cloud_storage import upload_gcs_file, download_gcs_file
-from models.LegalDocumentModel import LegalDocumentCreate
+from models.LegalDocumentBookmarkModel import LegalDocumentBookmark
+from models.LegalDocumentModel import LegalDocumentCreate, ELASTICSEARCH_LEGAL_DOCUMENT_MAPPINGS
 
 # Load Environment Variables.
 load_dotenv()
 
 GOOGLE_BUCKET_LEGAL_DOCUMENT_FOLDER_NAME = os.getenv('GOOGLE_BUCKET_LEGAL_DOCUMENT_FOLDER_NAME')
 ELASTICSEARCH_LEGAL_DOCUMENT_INDEX = os.getenv('ELASTICSEARCH_LEGAL_DOCUMENT_INDEX')
+LEGAL_DOCUMENT_METADATA_JSON_FILENAME = "metadata.json"
 
 
-def extract_text_pdf(file: UploadFile) -> str:
+def extract_text_pdf(file: IO[bytes]) -> str:
     """Extracts text from a PDF file using PyMuPDF."""
-    pdf_data = file.file.read()
-    pdf_document = fitz.open(stream=pdf_data, filetype="pdf")
+    try:
+        pdf_data = file.read()
+        pdf_document = fitz.open(stream=pdf_data, filetype="pdf")
 
-    text = ""
-    for page in pdf_document:
-        text += page.get_text()
+        text = ""
+        for page in pdf_document:
+            text += page.get_text()
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=str(e))
 
     return text
+
+
+def get_create_legal_document_mappings(es_client: ESClientDep):
+    """Create initial index mappings of legal documents."""
+    es_response = es_client.indices.create(
+        index=ELASTICSEARCH_LEGAL_DOCUMENT_INDEX,
+        body=ELASTICSEARCH_LEGAL_DOCUMENT_MAPPINGS
+    )
+
+    return es_response
 
 
 def index_legal_document(es_client: ESClientDep, document_data: dict):
     legal_document_create = LegalDocumentCreate(**document_data)
     _ = LegalDocumentCreate.model_validate(legal_document_create)
 
-    # Check if a document with the same title already exists
+    # Check if a document with the same filename already exists
     search_result = es_client.search(
         index=ELASTICSEARCH_LEGAL_DOCUMENT_INDEX,
         query={
-            "match": {
-                "title": legal_document_create.title
+            "constant_score": {
+                "filter": {
+                    "term": {
+                        "filename": legal_document_create.filename
+                    }
+
+                }
             }
         }
     )
 
     # If a document with this title exists, raise an error
     if search_result["hits"]["total"]["value"] > 0:
-        raise HTTPException(status_code=400, detail="A document with this title already exists.")
+        raise HTTPException(status_code=400, detail="An index with this filename already exists.")
 
     # Index the document with an auto-generated ID
     es_response = es_client.index(index=ELASTICSEARCH_LEGAL_DOCUMENT_INDEX, document=document_data)
 
     result = {
-        "es_result": es_response["result"],
-        "es_index": es_response["_index"],
         "es_id": es_response["_id"],
+        "es_filename": legal_document_create.filename,
     }
 
     return result
 
 
-def get_upload_legal_document(es_client: ESClientDep, file: UploadFile):
-    """Upload a PDF file, extract text, and index it."""
+def get_upload_legal_document(es_client: ESClientDep, file: UploadFile) -> dict:
+    """
+    Parse the zip file containing legal document pdfs and metadata json, so it can be uploaded to the system.
 
-    # Check file type.
-    if file.content_type != "application/pdf":
-        raise HTTPException(status_code=400, detail="Only PDF files are allowed.")
+    Example of the file structure inside the zip file would be as follows:
+        - metadata.json
+        - uu-no-53-tahun-2024.pdf
+        - uu-no-36-tahun-2024.pdf
+        ...
+
+    Example of the metadata.json structure would contain information of the pdf files as follows:
+    [
+        {
+            "title": "Undang-undang Nomor 53 Tahun 2024 Tentang Kota Bukittinggi di Provinsi Sumatera Barat",
+            "jenis_bentuk_peraturan": "UNDANG-UNDANG",
+            "pemrakarsa": "PEMERINTAH PUSAT",
+            "nomor": 53,
+            "tahun": 2024,
+            "tentang": "KOTA BUKITTINGGI DI PROVINSI SUMATERA BARAT",
+            "tempat_penetapan": "Jakarta",
+            "ditetapkan_tanggal": "01 Januari 1970",
+            "status": "Berlaku",
+            "reference_url": "https://peraturan.go.id/files/uu-no-53-tahun-2024.pdf",
+            "filename": "uu-no-53-tahun-2024.pdf"
+        },
+        ...
+    ]
+
+    Example of the return value of this function would be as follows:
+    {
+        "failed_upload": [
+            {
+              "uu4-1983.pdf": "400: A file with this name already exists in storage."
+            },
+            {
+              "uu1-1956.pdf": "400: A file with this name already exists in storage."
+            },
+            ...
+        ],
+
+        "successful_upload": [
+            {
+              "id": "5wHSHZIBIi1nR4ibIbSb",
+              "filename": "uu-no-36-tahun-2024.pdf",
+              "resource_url": "https://storage.cloud.google.com/lexin-ta.appspot.com/legal_document/uu-no-36-tahun-2024.pdf"
+            },
+            {
+              "id": "6AHSHZIBIi1nR4ibIrSD",
+              "filename": "uu-no-14-tahun-2024.pdf",
+              "resource_url": "https://storage.cloud.google.com/lexin-ta.appspot.com/legal_document/uu-no-14-tahun-2024.pdf"
+            },
+            ...
+        ]
+    }
+    """
+
+    # Check if file type is zip.
+    content_type = file.content_type
+    is_zip_content_type = False
+
+    if content_type == "application/zip" or content_type == "application/x-zip-compressed":
+        is_zip_content_type = True
+    if not is_zip_content_type:
+        raise HTTPException(status_code=400, detail="Only zip files are allowed.")
+
+    # Read uploaded zip file.
+    with zipfile.ZipFile(file.file, 'r') as zip_file:
+        # Check if metadata json file exists within the zip file.
+        filenames_in_zip_list = zip_file.namelist()
+
+        if LEGAL_DOCUMENT_METADATA_JSON_FILENAME not in filenames_in_zip_list:
+            raise HTTPException(status_code=400, detail="metadata.json not found.")
+        else:
+            filenames_in_zip_list.remove(LEGAL_DOCUMENT_METADATA_JSON_FILENAME)
+
+        # Extract metadata json file contents as a dictionary.
+        with zip_file.open(LEGAL_DOCUMENT_METADATA_JSON_FILENAME) as extracted_file:
+            metadata_content = extracted_file.read()
+            metadata_list = json.loads(metadata_content)
+
+        parse_result = parse_legal_document_and_metadata_zip(
+            es_client, zip_file, filenames_in_zip_list, metadata_list
+        )
+
+    return parse_result
+
+
+def parse_legal_document_and_metadata_zip(
+        es_client: ESClientDep, zip_file: zipfile, filenames_in_zip_list: list[str], metadata_list: list[dict]
+) -> dict:
+    """Upload filenames that are described in the metadata into the system."""
+    failed_upload_list = []
+    successful_upload_list = []
+    filenames_in_metadata_list = []
+
+    # Iterate metadata dictionary.
+    for metadata in metadata_list:
+        filename = metadata["filename"]
+        filenames_in_metadata_list.append(filename)
+
+        # Read a filename inside the zip file based on the metadata dictionary.
+        with zip_file.open(filename) as extracted_file:
+            try:
+                # Upload legal document to google cloud storage and index to elasticsearch.
+                upload_result = upload_legal_document_helper(es_client, extracted_file, metadata)
+                successful_upload_list.append(upload_result)
+
+            except HTTPException as e:
+                # Append filenames that failed to upload.
+                failed_upload_list.append({filename: str(e)})
+
+    # Prepare response for filenames with no metadata.
+    filename_in_zip_set = set(filenames_in_zip_list)
+    filename_in_metadata_set = set(filenames_in_metadata_list)
+
+    filename_with_no_metadata = filename_in_zip_set.difference(filename_in_metadata_set)
+    for filename in filename_with_no_metadata:
+        failed_upload_list.append({filename: "No metadata detected."})
+
+    # Prepare upload response.
+    parse_result = {
+        "failed_upload": failed_upload_list,
+        "successful_upload": successful_upload_list,
+    }
+
+    return parse_result
+
+
+def upload_legal_document_helper(
+        es_client: ESClientDep, extracted_file: IO[bytes], metadata: dict
+) -> dict:
+    """Upload PDF files to google cloud storage, extract text, and index it to elasticsearch."""
+    filename = metadata['filename']
 
     # Upload the PDF to Google Cloud Storage
-    blob_name = f"{GOOGLE_BUCKET_LEGAL_DOCUMENT_FOLDER_NAME}/{file.filename}"
-    gcs_url = upload_gcs_file(file, blob_name)
+    blob_name = f"{GOOGLE_BUCKET_LEGAL_DOCUMENT_FOLDER_NAME}/{filename}"
+    gcs_url = upload_gcs_file(extracted_file, blob_name)
 
     # At this point, the file pointer is at the end of the file
     # This is because the file is read first, then uploaded to google cloud storage.
     # If we try to read again, it will return an empty string or nothing
     # Reset the pointer to the beginning
-    file.file.seek(0)
+    extracted_file.seek(0)
 
     # Extract text from the PDF
-    pdf_text = extract_text_pdf(file)
+    pdf_text = extract_text_pdf(extracted_file)
 
     # Index the extracted text and GCS URL into Elasticsearch
     document_data = {
-        "title": file.filename,
         "content": pdf_text,
         "resource_url": gcs_url
     }
 
+    # Update document data with the metadata.
+    document_data.update(metadata)
+
+    # Send index document request.
     es_response = index_legal_document(es_client, document_data)
 
     # Prepare return dictionary.
-    es_response.update({"resource_url": gcs_url})
+    upload_result = {
+        "id": es_response["es_id"],
+        "filename": es_response["es_filename"],
+        "resource_url": gcs_url
+    }
 
-    return es_response
+    return upload_result
 
 
-def get_download_legal_document(es_client: ESClientDep, view_mode: bool, document_id: str):
+def get_download_legal_document(es_client: ESClientDep, view_mode: bool, document_id: str) -> StreamingResponse:
     """Download the original PDF from Google Cloud Storage."""
 
     # Retrieve the document from Elasticsearch.
@@ -131,19 +290,134 @@ def get_download_legal_document(es_client: ESClientDep, view_mode: bool, documen
     )
 
 
-def get_search_legal_document(es_client: ESClientDep, query: str):
-    """Search documents in Elasticsearch."""
+def search_legal_document_by_id(es_client: ESClientDep, document_id_list: list[str]) -> list[dict]:
+    """Retrieve multiple legal document metadata by id list.
+
+    The return value of this function is a list of dictionaries as follows:
+    [
+        {
+            "_index": "legal_document",
+            "_id": "cgHSHZIBIi1nR4ibuLUH",
+            "_score": 1,
+            "_source": {
+                "title": "Undang-undang Nomor 24 Tahun 2019 Tentang Ekonomi Kreatif",
+                "jenis_bentuk_peraturan": "UNDANG-UNDANG",
+                "pemrakarsa": "PEMERINTAH PUSAT",
+                "nomor": "24",
+                "tahun": "2019",
+                "tentang": "EKONOMI KREATIF",
+                "tempat_penetapan": "Jakarta",
+                "ditetapkan_tanggal": "24 Oktober 2019",
+                "status": "Berlaku"
+            }
+        },
+        ...
+    ]
+    """
+    # Retrieve the documents from Elasticsearch.
+    search_result = es_client.search(
+        index=ELASTICSEARCH_LEGAL_DOCUMENT_INDEX,
+        query={
+            "ids": {
+                "values": document_id_list
+            }
+        },
+        source={
+            "excludes": [
+                "filename",
+                "content",
+                "reference_url",
+                "resource_url"
+            ]
+        }
+
+    )
+    document_hits = search_result["hits"]["hits"]
+
+    return document_hits
+
+
+def search_legal_document_by_content(es_client: ESClientDep, query: str) -> list[dict]:
+    """Search documents by its content field in Elasticsearch.
+
+    The return value of this function is the same as the function search_legal_document_by_id().
+    """
     es_response = es_client.search(
         index=ELASTICSEARCH_LEGAL_DOCUMENT_INDEX,
         query={
             "match": {
                 "content": query
             }
+        },
+        source={
+            "excludes": [
+                "filename",
+                "content",
+                "reference_url",
+                "resource_url"
+            ]
         }
     )
 
-    es_hits = {
-        "es_hits": es_response["hits"]["hits"]
-    }
+    es_hits = es_response["hits"]["hits"]
 
     return es_hits
+
+
+def get_create_legal_document_bookmark(
+        session: Session, token_payload: JWTDecodeDep, document_id: str
+) -> LegalDocumentBookmark:
+    """Bookmark the user's documents"""
+    user_id = token_payload.get("sub")
+    db_legal_document_bookmark = LegalDocumentBookmark(user_id=user_id,
+                                                       document_id=document_id)
+
+    try:
+        session.add(db_legal_document_bookmark)
+        session.commit()
+        session.refresh(db_legal_document_bookmark)
+    except SQLAlchemyError as e:
+        raise HTTPException(status_code=422, detail=str(e.orig))
+
+    return db_legal_document_bookmark
+
+
+def get_read_legal_document_bookmark(session: Session, token_payload: JWTDecodeDep, es_client: ESClientDep):
+    """View the user's legal document bookmarks."""
+    user_id = token_payload.get("sub")
+
+    # Retrieve document ids from user's bookmarks.
+    try:
+        statement = select(LegalDocumentBookmark).where(LegalDocumentBookmark.user_id == user_id)
+        result = session.exec(statement)
+        db_legal_document_bookmark = result.all()
+    except SQLAlchemyError as e:
+        raise HTTPException(status_code=422, detail=str(e.orig))
+
+    # Query elasticsearch using document id list.
+    document_id_list = [doc.document_id for doc in db_legal_document_bookmark]
+    document_hits = search_legal_document_by_id(es_client, document_id_list)
+
+    return document_hits
+
+
+def get_delete_legal_document_bookmark_by_document_id(
+        session: Session, token_payload: JWTDecodeDep, document_id: str
+) -> dict:
+    """Delete the user's legal document bookmark by its document id."""
+    user_id = token_payload.get("sub")
+
+    # Retrieve document ids from user's bookmarks.
+    try:
+        statement = (select(LegalDocumentBookmark)
+                     .where(LegalDocumentBookmark.user_id == user_id)
+                     .where(LegalDocumentBookmark.document_id == document_id))
+        result = session.exec(statement)
+        db_legal_document_bookmark = result.first()
+
+        session.delete(db_legal_document_bookmark)
+        session.commit()
+    except SQLAlchemyError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+    return {"ok": True}
