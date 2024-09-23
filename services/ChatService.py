@@ -73,6 +73,7 @@ async def get_rag_inference_endpoint(question: dict):
     async with httpx.AsyncClient() as client:
         try:
             response = await client.post(url, json=question)
+            response.raise_for_status()
             response_data = response.json()
 
             return response_data
