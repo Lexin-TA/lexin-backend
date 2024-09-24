@@ -13,7 +13,7 @@ from sqlmodel import Session, select
 from internal.auth import JWTDecodeDep
 from internal.elastic import ESClientDep
 from internal.google_cloud_storage import upload_gcs_file, download_gcs_file
-from models.LegalDocumentBookmarkModel import LegalDocumentBookmark
+from models.LegalDocumentBookmarkModel import LegalDocumentBookmark, LegalDocumentBookmarkCreate
 from models.LegalDocumentModel import LegalDocumentCreate, ELASTICSEARCH_LEGAL_DOCUMENT_MAPPINGS
 
 # Load Environment Variables.
@@ -290,8 +290,48 @@ def get_download_legal_document(es_client: ESClientDep, view_mode: bool, documen
     )
 
 
-def search_legal_document_by_id(es_client: ESClientDep, document_id_list: list[str]) -> list[dict]:
-    """Retrieve multiple legal document metadata by id list.
+def search_legal_document_detail_by_id(es_client: ESClientDep, document_id: str) -> list[dict]:
+    """Retrieve a single legal document with all of its metadata by id.
+
+    The return value of this function is a dictionary as follows:
+    {
+        "_index": "legal_document",
+        "_id": "cgHSHZIBIi1nR4ibuLUH",
+        "_score": 1,
+        "_source": {
+            "content": "full text content of the pdf file."
+            "resource_url": "https://storage.cloud.google.com/lexin-ta.appspot.com/legal_document/uu-no-1-tahun-2024.pdf",
+            "title": "Undang-undang Nomor 1 Tahun 2024 Tentang Perubahan Kedua Atas Undang-undang Nomor 11 Tahun 2008 Tentang Informasi dan Transaksi Elektronik",
+            "jenis_bentuk_peraturan": "UNDANG-UNDANG",
+            "pemrakarsa": "PEMERINTAH PUSAT",
+            "nomor": "1",
+            "tahun": "2024",
+            "tentang": "PERUBAHAN KEDUA ATAS UNDANG-UNDANG NOMOR 11 TAHUN 2008 TENTANG INFORMASI DAN TRANSAKSI ELEKTRONIK",
+            "tempat_penetapan": "Jakarta",
+            "ditetapkan_tanggal": "02 Januari 2024",
+            "status": "Berlaku",
+            "reference_url": "https://peraturan.go.id/files/uu-no-1-tahun-2024.pdf",
+            "filename": "uu-no-1-tahun-2024.pdf"
+        }
+    }
+    """
+
+    # Retrieve the documents from Elasticsearch.
+    search_result = es_client.search(
+        index=ELASTICSEARCH_LEGAL_DOCUMENT_INDEX,
+        query={
+            "ids": {
+                "values": document_id
+            }
+        }
+    )
+    document_hits = search_result["hits"]["hits"]
+
+    return document_hits
+
+
+def search_multiple_legal_document_by_id_list(es_client: ESClientDep, document_id: list[str]) -> list[dict]:
+    """Retrieve multiple summarized legal document metadata by list of ids.
 
     The return value of this function is a list of dictionaries as follows:
     [
@@ -319,7 +359,7 @@ def search_legal_document_by_id(es_client: ESClientDep, document_id_list: list[s
         index=ELASTICSEARCH_LEGAL_DOCUMENT_INDEX,
         query={
             "ids": {
-                "values": document_id_list
+                "values": document_id
             }
         },
         source={
@@ -337,7 +377,7 @@ def search_legal_document_by_id(es_client: ESClientDep, document_id_list: list[s
     return document_hits
 
 
-def search_legal_document_by_content(es_client: ESClientDep, query: str) -> list[dict]:
+def search_multiple_legal_document_by_content(es_client: ESClientDep, query: str) -> list[dict]:
     """Search documents by its content field in Elasticsearch.
 
     The return value of this function is the same as the function search_legal_document_by_id().
@@ -365,12 +405,15 @@ def search_legal_document_by_content(es_client: ESClientDep, query: str) -> list
 
 
 def get_create_legal_document_bookmark(
-        session: Session, token_payload: JWTDecodeDep, document_id: str
+        session: Session, token_payload: JWTDecodeDep, legal_document_bookmark_create: LegalDocumentBookmarkCreate
 ) -> LegalDocumentBookmark:
-    """Bookmark the user's documents"""
+    """Bookmark the user's legal documents"""
     user_id = token_payload.get("sub")
-    db_legal_document_bookmark = LegalDocumentBookmark(user_id=user_id,
-                                                       document_id=document_id)
+
+    db_legal_document_bookmark = LegalDocumentBookmark(
+        user_id=user_id,
+        document_id=legal_document_bookmark_create.document_id
+    )
 
     try:
         session.add(db_legal_document_bookmark)
@@ -382,7 +425,7 @@ def get_create_legal_document_bookmark(
     return db_legal_document_bookmark
 
 
-def get_read_legal_document_bookmark(session: Session, token_payload: JWTDecodeDep, es_client: ESClientDep):
+def get_read_legal_document_bookmark_by_user(session: Session, token_payload: JWTDecodeDep, es_client: ESClientDep):
     """View the user's legal document bookmarks."""
     user_id = token_payload.get("sub")
 
@@ -396,7 +439,7 @@ def get_read_legal_document_bookmark(session: Session, token_payload: JWTDecodeD
 
     # Query elasticsearch using document id list.
     document_id_list = [doc.document_id for doc in db_legal_document_bookmark]
-    document_hits = search_legal_document_by_id(es_client, document_id_list)
+    document_hits = search_multiple_legal_document_by_id_list(es_client, document_id_list)
 
     return document_hits
 

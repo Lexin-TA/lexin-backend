@@ -5,7 +5,6 @@ from models.UserModel import User
 
 # Base model.
 class LegalDocumentBookmarkBase(SQLModel):
-    user_id: int
     document_id: str
 
 

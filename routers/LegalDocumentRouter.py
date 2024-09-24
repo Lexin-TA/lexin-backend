@@ -4,7 +4,7 @@ from starlette.responses import StreamingResponse
 from internal.auth import JWTDecodeDep
 from internal.database import SessionDep
 from internal.elastic import ESClientDep
-from models.LegalDocumentBookmarkModel import LegalDocumentBookmarkRead
+from models.LegalDocumentBookmarkModel import LegalDocumentBookmarkRead, LegalDocumentBookmarkCreate
 from services import LegalDocumentService
 
 router = APIRouter(prefix="/legal-document")
@@ -24,7 +24,7 @@ def upload_legal_document(es_client: ESClientDep, file: UploadFile) -> dict:
     return upload_result
 
 
-@router.get("/download")
+@router.get("/download/{document_id}")
 def download_legal_document(es_client: ESClientDep, document_id: str) -> StreamingResponse:
     download_result = LegalDocumentService.get_download_legal_document(es_client,
                                                                        view_mode=False,
@@ -33,39 +33,59 @@ def download_legal_document(es_client: ESClientDep, document_id: str) -> Streami
     return download_result
 
 
-@router.get("/view")
-def view_legal_document(es_client: ESClientDep, document_id: str) -> StreamingResponse:
+@router.get("/view/{document_id}")
+def view_legal_document_file(es_client: ESClientDep, document_id: str) -> StreamingResponse:
     view_result = LegalDocumentService.get_download_legal_document(es_client,
                                                                    view_mode=True,
                                                                    document_id=document_id)
     return view_result
 
 
+@router.get("/detail-full/{document_id}")
+def get_legal_document_by_id(es_client: ESClientDep, document_id: str) -> list[dict]:
+    search_result = LegalDocumentService.search_legal_document_detail_by_id(es_client, document_id)
+
+    return search_result
+
+
+@router.post("/detail-concise/")
+def get_multiple_legal_document_by_id_list(es_client: ESClientDep, document_id_list: list[str]) -> list[dict]:
+    search_result = LegalDocumentService.search_multiple_legal_document_by_id_list(es_client, document_id_list)
+
+    return search_result
+
+
 @router.get("/search")
-def search_legal_document(es_client: ESClientDep, query: str) -> list[dict]:
-    search_result = LegalDocumentService.search_legal_document_by_content(es_client, query)
+def search_multiple_legal_document_by_content(es_client: ESClientDep, query: str) -> list[dict]:
+    search_result = LegalDocumentService.search_multiple_legal_document_by_content(es_client, query)
 
     return search_result
 
 
 @router.post("/bookmark", response_model=LegalDocumentBookmarkRead)
-def create_legal_document_bookmark(*, session: SessionDep, token_payload: JWTDecodeDep, document_id: str):
-    bookmark_result = LegalDocumentService.get_create_legal_document_bookmark(session, token_payload, document_id)
+def create_legal_document_bookmark(
+    *, session: SessionDep, token_payload: JWTDecodeDep, legal_document_bookmark_create: LegalDocumentBookmarkCreate
+):
+    bookmark_result = LegalDocumentService.get_create_legal_document_bookmark(
+        session, token_payload, legal_document_bookmark_create
+    )
 
     return bookmark_result
 
 
 @router.get("/bookmark")
-def read_legal_document_bookmark(*, session: SessionDep, token_payload: JWTDecodeDep, es_client: ESClientDep):
-    db_legal_document_bookmarks = LegalDocumentService.get_read_legal_document_bookmark(session,
-                                                                                        token_payload,
-                                                                                        es_client)
+def read_legal_document_bookmark_by_user(*, session: SessionDep, token_payload: JWTDecodeDep, es_client: ESClientDep):
+    db_legal_document_bookmarks = LegalDocumentService.get_read_legal_document_bookmark_by_user(session,
+                                                                                                token_payload,
+                                                                                                es_client)
 
     return db_legal_document_bookmarks
 
 
-@router.delete("/bookmark")
-def delete_legal_document_bookmark(*, session: SessionDep, token_payload: JWTDecodeDep, document_id: str):
+@router.delete("/bookmark/{document_id}")
+def delete_legal_document_bookmark_by_document_id(
+        *, session: SessionDep, token_payload: JWTDecodeDep, document_id: str
+):
     delete_response = LegalDocumentService.get_delete_legal_document_bookmark_by_document_id(session,
                                                                                              token_payload,
                                                                                              document_id)

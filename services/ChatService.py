@@ -12,7 +12,7 @@ from internal.elastic import ESClientDep
 from internal.websocket import WebSocketManager
 from models.ChatMessageModel import ChatMessageCreate, ChatMessage
 from models.ChatRoomModel import ChatRoomCreate, ChatRoom
-from services.LegalDocumentService import search_legal_document_by_content
+from services.LegalDocumentService import search_multiple_legal_document_by_content
 
 # Load Environment Variables.
 load_dotenv()
@@ -44,7 +44,7 @@ async def get_websocket_endpoint(
             user_question_str = user_question_dict["message"]
 
             # Search legal documents with the user prompt.
-            es_hits = search_legal_document_by_content(es_client, user_question_str)
+            es_hits = search_multiple_legal_document_by_content(es_client, user_question_str)
 
             # Send user prompt to RAG inference endpoint.
             rag_answer_dict = await get_rag_inference_endpoint(user_question_dict)
