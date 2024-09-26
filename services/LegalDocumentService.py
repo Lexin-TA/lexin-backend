@@ -1,4 +1,5 @@
 import json
+import math
 import os
 import zipfile
 from typing import IO
@@ -290,7 +291,7 @@ def get_download_legal_document(es_client: ESClientDep, view_mode: bool, documen
     )
 
 
-def search_legal_document_detail_by_id(es_client: ESClientDep, document_id: str) -> list[dict]:
+def search_legal_document_detail_by_id(es_client: ESClientDep, document_id: str) -> dict:
     """Retrieve a single legal document with all of its metadata by id.
 
     The return value of this function is a dictionary as follows:
@@ -379,13 +380,24 @@ def search_multiple_legal_document_by_id_list(es_client: ESClientDep, document_i
     return document_hits
 
 
-def search_multiple_legal_document_by_content(es_client: ESClientDep, query: str) -> list[dict]:
+def search_multiple_legal_document_by_content(
+        es_client: ESClientDep, query: str, page: int = 1, size: int = 10
+) -> dict:
     """Search documents by its content field in Elasticsearch.
 
-    The return value of this function is the same as the function search_legal_document_by_id().
+    query   : query string used to search document by its content
+    page    : determines which page to get (defaults to and starts with 1)
+    size    : the amount of returned document in a single query (defaults to 10)
     """
+
+    # Calculate the starting document based on the current page and page size
+    from_ = (page - 1) * size
+
+    # Perform document search.
     es_response = es_client.search(
         index=ELASTICSEARCH_LEGAL_DOCUMENT_INDEX,
+        from_=from_,
+        size=size,
         query={
             "match": {
                 "content": query
@@ -401,9 +413,25 @@ def search_multiple_legal_document_by_content(es_client: ESClientDep, query: str
         }
     )
 
+    # Extracting the hits (documents)
     es_hits = es_response["hits"]["hits"]
 
-    return es_hits
+    # Extract total hits
+    es_total_hits = es_response["hits"]["total"]["value"]
+
+    # Calculate total pages
+    total_pages = math.ceil(es_total_hits / size)
+
+    # Prepare return dictionary.
+    pagination_res = {
+        "page": page,
+        "size": size,
+        "total_hits": es_total_hits,
+        "total_pages": total_pages,
+        "hits": es_hits
+    }
+
+    return pagination_res
 
 
 def get_create_legal_document_bookmark(
