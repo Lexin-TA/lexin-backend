@@ -42,7 +42,7 @@ def view_legal_document_file(es_client: ESClientDep, document_id: str) -> Stream
 
 
 @router.get("/detail-full/{document_id}")
-def get_legal_document_by_id(es_client: ESClientDep, document_id: str) -> list[dict]:
+def get_legal_document_by_id(es_client: ESClientDep, document_id: str) -> dict:
     search_result = LegalDocumentService.search_legal_document_detail_by_id(es_client, document_id)
 
     return search_result

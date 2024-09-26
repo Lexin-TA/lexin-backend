@@ -326,6 +326,8 @@ def search_legal_document_detail_by_id(es_client: ESClientDep, document_id: str)
         }
     )
     document_hits = search_result["hits"]["hits"][0]
+    print("document hit")
+    print(document_hits)
 
     return document_hits
 
