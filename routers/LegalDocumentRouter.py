@@ -1,4 +1,4 @@
-from fastapi import APIRouter, UploadFile
+from fastapi import APIRouter, UploadFile, Query
 from starlette.responses import StreamingResponse
 
 from internal.auth import JWTDecodeDep
@@ -11,7 +11,7 @@ router = APIRouter(prefix="/legal-document")
 
 
 @router.post("/create-mapping")
-def create_legal_document_mappings(es_client: ESClientDep,):
+def create_legal_document_mappings(es_client: ESClientDep):
     mapping_result = LegalDocumentService.get_create_legal_document_mappings(es_client)
 
     return mapping_result
@@ -56,8 +56,10 @@ def get_multiple_legal_document_by_id_list(es_client: ESClientDep, document_id_l
 
 
 @router.get("/search")
-def search_multiple_legal_document_by_content(es_client: ESClientDep, query: str) -> list[dict]:
-    search_result = LegalDocumentService.search_multiple_legal_document_by_content(es_client, query)
+def search_multiple_legal_document_by_content(
+        es_client: ESClientDep, query: str, page: int = Query(1, ge=1), size: int = Query(10, ge=1)
+) -> dict:
+    search_result = LegalDocumentService.search_multiple_legal_document_by_content(es_client, query, page, size)
 
     return search_result
 
