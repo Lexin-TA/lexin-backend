@@ -2,12 +2,15 @@ import json
 import math
 import os
 import zipfile
+import time
 from typing import IO
 
 import fitz
 from dotenv import load_dotenv
+from elasticsearch import ApiError
 from fastapi import UploadFile, HTTPException
 from fastapi.responses import StreamingResponse
+from pydantic import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session, select
 
@@ -51,8 +54,12 @@ def get_create_legal_document_mappings(es_client: ESClientDep):
 
 
 def index_legal_document(es_client: ESClientDep, document_data: dict):
-    legal_document_create = LegalDocumentCreate(**document_data)
-    _ = LegalDocumentCreate.model_validate(legal_document_create)
+    # Validate legal document model.
+    try:
+        legal_document_create = LegalDocumentCreate(**document_data)
+        _ = LegalDocumentCreate.model_validate(legal_document_create)
+    except ValidationError as e:
+        raise HTTPException(status_code=422, detail=str(e))
 
     # Check if a document with the same filename already exists
     search_result = es_client.search(
@@ -74,7 +81,10 @@ def index_legal_document(es_client: ESClientDep, document_data: dict):
         raise HTTPException(status_code=400, detail="An index with this filename already exists.")
 
     # Index the document with an auto-generated ID
-    es_response = es_client.index(index=ELASTICSEARCH_LEGAL_DOCUMENT_INDEX, document=document_data)
+    try:
+        es_response = es_client.index(index=ELASTICSEARCH_LEGAL_DOCUMENT_INDEX, document=document_data)
+    except ApiError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message)
 
     result = {
         "es_id": es_response["_id"],
@@ -139,6 +149,7 @@ def get_upload_legal_document(es_client: ESClientDep, file: UploadFile) -> dict:
         ]
     }
     """
+    start_time = time.time()
 
     # Check if file type is zip.
     content_type = file.content_type
@@ -167,6 +178,12 @@ def get_upload_legal_document(es_client: ESClientDep, file: UploadFile) -> dict:
         parse_result = parse_legal_document_and_metadata_zip(
             es_client, zip_file, filenames_in_zip_list, metadata_list
         )
+
+    # Calculate execution time of file upload.
+    end_time = time.time()
+    execution_time = end_time - start_time
+
+    parse_result["execution_time"] = execution_time
 
     return parse_result
 
