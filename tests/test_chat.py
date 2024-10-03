@@ -106,7 +106,7 @@ def test_create_chat_room(session: Session, client: TestClient, user: user_fixtu
 
     # Testing assertions.
     assert response.status_code == 200
-    assert len(data) == 2
+    assert len(data) == 5
     assert data["id"] is not None
     assert data["title"] == req_json["title"]
 

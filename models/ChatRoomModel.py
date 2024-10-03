@@ -7,7 +7,7 @@ from models.UserModel import User
 
 # Base model.
 class ChatRoomBase(SQLModel):
-    title: str
+    pass
 
 
 # Database model used for tables in the db.
@@ -16,7 +16,9 @@ class ChatRoom(ChatRoomBase, table=True):
 
     # Attributes.
     id: int | None = Field(default=None, primary_key=True)
+    title: str
     creation_time: datetime = Field(default=datetime.now(timezone.utc))
+    bookmark: bool = Field(default=False)
     user_id: int = Field(foreign_key='users.id')
 
     # Relationships.
@@ -27,8 +29,16 @@ class ChatRoom(ChatRoomBase, table=True):
 
 # Data model used for requests/responses in the application.
 class ChatRoomCreate(ChatRoomBase):
-    pass
+    title: str
 
 
 class ChatRoomRead(ChatRoomBase):
     id: int
+    title: str
+    creation_time: datetime
+    bookmark: bool
+    user_id: int
+
+
+class ChatRoomUpdate(ChatRoomBase):
+    bookmark: bool | None = None
