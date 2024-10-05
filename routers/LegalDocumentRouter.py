@@ -57,9 +57,15 @@ def get_multiple_legal_document_by_id_list(es_client: ESClientDep, document_id_l
 
 @router.get("/search")
 def search_multiple_legal_document_by_content(
-        es_client: ESClientDep, query: str, page: int = Query(1, ge=1), size: int = Query(10, ge=1)
+        es_client: ESClientDep, query: str, page: int = Query(1, ge=1), size: int = Query(10, ge=1),
+        jenis_bentuk_peraturan: str = None,
+        status: str = None,
+        sort: str = "_score"
 ) -> dict:
-    search_result = LegalDocumentService.search_multiple_legal_document_by_content(es_client, query, page, size)
+    search_result = LegalDocumentService.search_multiple_legal_document_by_content(
+        es_client, query, page, size,
+        jenis_bentuk_peraturan, status, sort
+    )
 
     return search_result
 
