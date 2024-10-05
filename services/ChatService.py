@@ -11,7 +11,7 @@ from internal.auth import JWTDecodeDep, jwt_decode_access
 from internal.elastic import ESClientDep
 from internal.websocket import WebSocketManager
 from models.ChatMessageModel import ChatMessageCreate, ChatMessage
-from models.ChatRoomModel import ChatRoomCreate, ChatRoom
+from models.ChatRoomModel import ChatRoomCreate, ChatRoom, ChatRoomUpdate
 from services.LegalDocumentService import search_multiple_legal_document_by_content
 
 # Load Environment Variables.
@@ -104,6 +104,31 @@ def get_create_chat_room(
     return db_chat_room
 
 
+# Update the chat room's bookmark status.
+def get_update_chat_room_bookmark(
+        session: Session, token_payload: JWTDecodeDep, chat_room_id: int, chat_room_update: ChatRoomUpdate
+) -> ChatRoom:
+    # Check if current user is owner of chat room.
+    user_id = token_payload.get('sub')
+    db_chat_room = is_user_owner_of_chat_room(session, user_id, chat_room_id)
+
+    if db_chat_room is False:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Could not validate credentials")
+
+    # Update chat room with new data.
+    chat_room_data = chat_room_update.model_dump(exclude_unset=True)
+    db_chat_room.sqlmodel_update(chat_room_data)
+
+    try:
+        session.add(db_chat_room)
+        session.commit()
+        session.refresh(db_chat_room)
+    except SQLAlchemyError as e:
+        raise HTTPException(status_code=422, detail=str(e.orig))
+
+    return db_chat_room
+
+
 # Receive all chat rooms owned by a user.
 def get_read_chat_room_by_user_id(
         session: Session, token_payload: JWTDecodeDep
@@ -120,8 +145,25 @@ def get_read_chat_room_by_user_id(
     return db_chat_rooms
 
 
+# Receive all chat rooms owned by a user that are bookmarked.
+def get_read_chat_room_bookmark_by_user_id(
+        session: Session, token_payload: JWTDecodeDep
+) -> Sequence[ChatRoom]:
+    user_id = token_payload.get("sub")
+
+    try:
+        statement = (select(ChatRoom)
+                     .where(ChatRoom.user_id == user_id)
+                     .where(ChatRoom.bookmark == True))
+        result = session.exec(statement)
+        db_chat_rooms = result.all()
+    except SQLAlchemyError as e:
+        raise HTTPException(status_code=422, detail=str(e.orig))
+
+    return db_chat_rooms
+
 # Receive all messages in a chat room by its id.
-def get_read_chat_room_messages(
+def get_read_chat_room_message_by_chat_room_id(
         session: Session, token_payload: JWTDecodeDep, chat_room_id: int
 ) -> Sequence[ChatMessage]:
     # Check if current user is owner of chat room.
@@ -185,11 +227,17 @@ def create_chat_message(session: Session, chat_message_create: ChatMessageCreate
     return db_chat_message
 
 
+# Check if current user is owner of chat room.
 def is_user_owner_of_chat_room(session, user_id: int, chat_room_id: id):
-    # Check if current user is owner of chat room.
     db_chat_room = get_chat_room_by_id(session, chat_room_id)
+
+    # Check if there is a chat room with the id.
+    if not db_chat_room:
+        return False
+
     chat_room_user_id = db_chat_room.user_id
 
+    # Check if the user owns the chat room .
     if user_id != chat_room_user_id:
         return False
 

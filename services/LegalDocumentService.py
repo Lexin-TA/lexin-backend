@@ -2,12 +2,15 @@ import json
 import math
 import os
 import zipfile
+import time
 from typing import IO
 
 import fitz
 from dotenv import load_dotenv
+from elasticsearch import ApiError
 from fastapi import UploadFile, HTTPException
 from fastapi.responses import StreamingResponse
+from pydantic import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session, select
 
@@ -51,8 +54,12 @@ def get_create_legal_document_mappings(es_client: ESClientDep):
 
 
 def index_legal_document(es_client: ESClientDep, document_data: dict):
-    legal_document_create = LegalDocumentCreate(**document_data)
-    _ = LegalDocumentCreate.model_validate(legal_document_create)
+    # Validate legal document model.
+    try:
+        legal_document_create = LegalDocumentCreate(**document_data)
+        _ = LegalDocumentCreate.model_validate(legal_document_create)
+    except ValidationError as e:
+        raise HTTPException(status_code=422, detail=str(e))
 
     # Check if a document with the same filename already exists
     search_result = es_client.search(
@@ -74,7 +81,10 @@ def index_legal_document(es_client: ESClientDep, document_data: dict):
         raise HTTPException(status_code=400, detail="An index with this filename already exists.")
 
     # Index the document with an auto-generated ID
-    es_response = es_client.index(index=ELASTICSEARCH_LEGAL_DOCUMENT_INDEX, document=document_data)
+    try:
+        es_response = es_client.index(index=ELASTICSEARCH_LEGAL_DOCUMENT_INDEX, document=document_data)
+    except ApiError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message)
 
     result = {
         "es_id": es_response["_id"],
@@ -139,6 +149,7 @@ def get_upload_legal_document(es_client: ESClientDep, file: UploadFile) -> dict:
         ]
     }
     """
+    start_time = time.time()
 
     # Check if file type is zip.
     content_type = file.content_type
@@ -167,6 +178,12 @@ def get_upload_legal_document(es_client: ESClientDep, file: UploadFile) -> dict:
         parse_result = parse_legal_document_and_metadata_zip(
             es_client, zip_file, filenames_in_zip_list, metadata_list
         )
+
+    # Calculate execution time of file upload.
+    end_time = time.time()
+    execution_time = end_time - start_time
+
+    parse_result["execution_time"] = execution_time
 
     return parse_result
 
@@ -381,45 +398,86 @@ def search_multiple_legal_document_by_id_list(es_client: ESClientDep, document_i
 
 
 def search_multiple_legal_document_by_content(
-        es_client: ESClientDep, query: str, page: int = 1, size: int = 10
+        es_client: ESClientDep, query: str, page: int = 1, size: int = 10,
+        jenis_bentuk_peraturan: str = None,
+        status: str = None,
+        sort: str = "_score"
 ) -> dict:
     """Search documents by its content field in Elasticsearch.
 
-    query   : query string used to search document by its content
-    page    : determines which page to get (defaults to and starts with 1)
-    size    : the amount of returned document in a single query (defaults to 10)
+    query                   : query string used to search document by its content
+    page                    : determines which page to get (defaults to and starts with 1)
+    size                    : the amount of returned document in a single query (defaults to 10)
+    jenis_bentuk_peraturan  : string value used to filter jenis_bentuk_peraturan (such as "UNDANG-UNDANG")
+    status                  : string value used to filter status (such as "Berlaku")
+    sort                    : string value used to sort by field name descending (such as "ditetapkan_tanggal"),
+                              defaults to sort by score
     """
 
     # Calculate the starting document based on the current page and page size
     from_ = (page - 1) * size
 
-    # Perform document search.
-    es_response = es_client.search(
-        index=ELASTICSEARCH_LEGAL_DOCUMENT_INDEX,
-        from_=from_,
-        size=size,
-        query={
+    # Write search parameter dictionary.
+    search_parameters = {
+        "index": ELASTICSEARCH_LEGAL_DOCUMENT_INDEX,
+        "from_": from_,
+        "size": size,
+        # Query string is used to search the document's content field
+        "query": {
             "match": {
                 "content": query
             }
         },
-        source={
+        # Exclude fields on the return search query value.
+        "source": {
             "excludes": [
                 "filename",
                 "content",
                 "reference_url",
                 "resource_url"
             ]
-        }
-    )
+        },
+        # Aggregates all unique values of a field, also return it's count based on the search query.
+        "aggs": {
+            "jenis_bentuk_peraturan_uniques": {
+                "terms": {
+                    "field": "jenis_bentuk_peraturan"
+                }
+            },
+            "status_uniques": {
+                "terms": {
+                    "field": "status"
+                }
+            }
+        },
+    }
 
-    # Extracting the hits (documents)
+    # Create filters if specified.
+    post_filter = {}
+    if jenis_bentuk_peraturan:
+        post_filter["term"] = {"jenis_bentuk_peraturan": jenis_bentuk_peraturan}
+    if status:
+        post_filter["term"] = {"status": status}
+
+    if post_filter:
+        search_parameters["post_filter"] = post_filter
+
+    # Create sorting by a field if specified.
+    if sort:
+        search_parameters["sort"] = [{sort: "desc"}]
+
+    # Perform document search.
+    try:
+        es_response = es_client.search(**search_parameters)
+    except ApiError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message)
+
+    # Extracting document hits and aggregations.
     es_hits = es_response["hits"]["hits"]
+    es_aggregations = es_response["aggregations"]
 
-    # Extract total hits
+    # Calculate total pages.
     es_total_hits = es_response["hits"]["total"]["value"]
-
-    # Calculate total pages
     total_pages = math.ceil(es_total_hits / size)
 
     # Prepare return dictionary.
@@ -428,7 +486,8 @@ def search_multiple_legal_document_by_content(
         "size": size,
         "total_hits": es_total_hits,
         "total_pages": total_pages,
-        "hits": es_hits
+        "hits": es_hits,
+        "aggregations": es_aggregations
     }
 
     return pagination_res

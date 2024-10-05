@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from sqlmodel import SQLModel
 
 
@@ -11,8 +13,9 @@ class LegalDocumentBase(SQLModel):
     tahun: int
     tentang: str
     tempat_penetapan: str
-    ditetapkan_tanggal: str
+    ditetapkan_tanggal: datetime | None
     status: str
+    dicabut_oleh: list[str]
 
     filename: str
     content: str
@@ -25,7 +28,7 @@ class LegalDocumentCreate(LegalDocumentBase):
 
 
 class LegalDocumentRead(LegalDocumentBase):
-    str: int
+    pass
 
 
 # Elasticsearch mappings used for initial index creation of legal documents.
@@ -33,14 +36,15 @@ ELASTICSEARCH_LEGAL_DOCUMENT_MAPPINGS = {
     "mappings": {
         "properties": {
             "title": {"type": "text"},
-            "jenis_bentuk_peraturan": {"type": "text"},
-            "pemrakarsa": {"type": "text"},
+            "jenis_bentuk_peraturan": {"type": "keyword"},
+            "pemrakarsa": {"type": "keyword"},
             "nomor": {"type": "integer"},
             "tahun": {"type": "integer"},
             "tentang": {"type": "text"},
-            "tempat_penetapan": {"type": "text"},
-            "ditetapkan_tanggal": {"type": "text"},
-            "status": {"type": "text"},
+            "tempat_penetapan": {"type": "keyword"},
+            "ditetapkan_tanggal": {"type": "date", "format": "yyyy-MM-dd"},
+            "status": {"type": "keyword"},
+            "dicabut_oleh": {"type": "text"},   # This is an array of document title strings.
 
             "filename": {"type": "keyword"},
             "content": {"type": "text"},
