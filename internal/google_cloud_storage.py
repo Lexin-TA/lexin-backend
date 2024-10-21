@@ -4,8 +4,9 @@ import os
 from typing import IO
 
 from dotenv import load_dotenv
-from fastapi import UploadFile, HTTPException
+from fastapi import HTTPException
 from google.cloud import storage
+from google.api_core.exceptions import GoogleAPIError
 
 # Load Environment Variables.
 load_dotenv()
@@ -19,11 +20,57 @@ GOOGLE_CLOUD_STORAGE_URI = os.getenv('GOOGLE_CLOUD_STORAGE_URI')
 GOOGLE_BUCKET_NAME = os.getenv('GOOGLE_BUCKET_NAME')
 
 # Initialize Google Cloud Storage client.
-client = storage.Client()
-bucket = client.get_bucket(GOOGLE_BUCKET_NAME)
+storage_client = storage.Client()
 
 
-def upload_gcs_file(file: IO[bytes], blob_name: str) -> str:
+# def create_bucket(bucket_name):
+#     """Creates a new bucket."""
+#     try:
+#         bucket = storage_client.create_bucket(bucket_name)
+#     except GoogleAPIError as e:
+#         raise HTTPException(status_code=422, detail=str(e))
+#
+#     result = {
+#         "detail": f"Bucket {bucket.name} created",
+#         "ok": True
+#     }
+#
+#     return result
+#
+#
+# def delete_bucket(bucket_name):
+#     """Deletes a bucket even if it's not empty."""
+#     try:
+#         bucket = storage_client.get_bucket(bucket_name)
+#         bucket.delete(force=True)
+#     except GoogleAPIError as e:
+#         raise HTTPException(status_code=422, detail=str(e))
+#
+#     result = {
+#         "detail": f"Bucket {bucket.name} deleted",
+#         "ok": True
+#     }
+#
+#     return result
+
+
+def delete_all_gcs_file(bucket_name: str) -> dict:
+    bucket = storage_client.get_bucket(bucket_name)
+
+    blobs = bucket.list_blobs()
+    for blob in blobs:
+        blob.delete()
+
+    result = {
+        "detail": f"Bucket {bucket.name} cleared",
+        "ok": True
+    }
+
+    return result
+
+
+def upload_gcs_file(bucket_name: str, file: IO[bytes], blob_name: str) -> str:
+    bucket = storage_client.get_bucket(bucket_name)
     blob = bucket.blob(blob_name)
 
     # Check if file is already in google cloud storage.
@@ -37,7 +84,8 @@ def upload_gcs_file(file: IO[bytes], blob_name: str) -> str:
     return file_url
 
 
-def download_gcs_file(blob_name: str) -> io.BytesIO:
+def download_gcs_file(bucket_name: str, blob_name: str) -> io.BytesIO:
+    bucket = storage_client.get_bucket(bucket_name)
     blob = bucket.blob(blob_name)
 
     file_content = blob.download_as_bytes()

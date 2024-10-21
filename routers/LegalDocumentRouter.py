@@ -10,11 +10,25 @@ from services import LegalDocumentService
 router = APIRouter(prefix="/legal-document")
 
 
-@router.post("/create-mapping")
+@router.post("/mapping")
 def create_legal_document_mappings(es_client: ESClientDep):
-    mapping_result = LegalDocumentService.get_create_legal_document_mappings(es_client)
+    create_mapping_result = LegalDocumentService.get_create_legal_document_mappings(es_client)
 
-    return mapping_result
+    return create_mapping_result
+
+
+@router.delete("/mapping")
+def delete_legal_document_mappings(es_client: ESClientDep):
+    delete_mapping_result = LegalDocumentService.get_delete_legal_document_mappings(es_client)
+
+    return delete_mapping_result
+
+
+@router.delete("/files")
+def delete_legal_document_files():
+    delete_files_result = LegalDocumentService.get_delete_all_legal_document_files()
+
+    return delete_files_result
 
 
 @router.post("/upload")
@@ -48,11 +62,11 @@ def get_legal_document_by_id(es_client: ESClientDep, document_id: str) -> dict:
     return search_result
 
 
-@router.post("/detail-concise/")
-def get_multiple_legal_document_by_id_list(es_client: ESClientDep, document_id_list: list[str]) -> list[dict]:
-    search_result = LegalDocumentService.search_multiple_legal_document_by_id_list(es_client, document_id_list)
-
-    return search_result
+# @router.post("/detail-concise/")
+# def get_multiple_legal_document_by_id_list(es_client: ESClientDep, document_id_list: list[str]) -> list[dict]:
+#     search_result = LegalDocumentService.search_multiple_legal_document_by_id_list(es_client, document_id_list)
+#
+#     return search_result
 
 
 @router.get("/search")

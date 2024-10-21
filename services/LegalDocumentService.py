@@ -16,7 +16,7 @@ from sqlmodel import Session, select
 
 from internal.auth import JWTDecodeDep
 from internal.elastic import ESClientDep
-from internal.google_cloud_storage import upload_gcs_file, download_gcs_file
+from internal.google_cloud_storage import upload_gcs_file, download_gcs_file, GOOGLE_BUCKET_NAME, delete_all_gcs_file
 from models.LegalDocumentBookmarkModel import LegalDocumentBookmark, LegalDocumentBookmarkCreate
 from models.LegalDocumentModel import LegalDocumentCreate, ELASTICSEARCH_LEGAL_DOCUMENT_MAPPINGS
 
@@ -26,6 +26,32 @@ load_dotenv()
 GOOGLE_BUCKET_LEGAL_DOCUMENT_FOLDER_NAME = os.getenv('GOOGLE_BUCKET_LEGAL_DOCUMENT_FOLDER_NAME')
 ELASTICSEARCH_LEGAL_DOCUMENT_INDEX = os.getenv('ELASTICSEARCH_LEGAL_DOCUMENT_INDEX')
 LEGAL_DOCUMENT_METADATA_JSON_FILENAME = "metadata.json"
+
+
+def get_create_legal_document_mappings(es_client: ESClientDep):
+    """Create initial index mappings of legal documents."""
+    es_response = es_client.indices.create(
+        index=ELASTICSEARCH_LEGAL_DOCUMENT_INDEX,
+        body=ELASTICSEARCH_LEGAL_DOCUMENT_MAPPINGS
+    )
+
+    return es_response
+
+
+def get_delete_legal_document_mappings(es_client: ESClientDep):
+    """Create initial index mappings of legal documents."""
+    es_response = es_client.indices.delete(
+        index=ELASTICSEARCH_LEGAL_DOCUMENT_INDEX,
+        ignore=[400, 404]
+    )
+
+    return es_response
+
+
+def get_delete_all_legal_document_files():
+    delete_response = delete_all_gcs_file(GOOGLE_BUCKET_NAME)
+
+    return delete_response
 
 
 def extract_text_pdf(file: IO[bytes]) -> str:
@@ -43,16 +69,6 @@ def extract_text_pdf(file: IO[bytes]) -> str:
     return text
 
 
-def get_create_legal_document_mappings(es_client: ESClientDep):
-    """Create initial index mappings of legal documents."""
-    es_response = es_client.indices.create(
-        index=ELASTICSEARCH_LEGAL_DOCUMENT_INDEX,
-        body=ELASTICSEARCH_LEGAL_DOCUMENT_MAPPINGS
-    )
-
-    return es_response
-
-
 def index_legal_document(es_client: ESClientDep, document_data: dict):
     # Validate legal document model.
     try:
@@ -61,34 +77,34 @@ def index_legal_document(es_client: ESClientDep, document_data: dict):
     except ValidationError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
-    # Check if a document with the same filename already exists
-    search_result = es_client.search(
-        index=ELASTICSEARCH_LEGAL_DOCUMENT_INDEX,
-        query={
-            "constant_score": {
-                "filter": {
-                    "term": {
-                        "filename": legal_document_create.filename
-                    }
-
-                }
-            }
-        }
-    )
-
-    # If a document with this title exists, raise an error
-    if search_result["hits"]["total"]["value"] > 0:
-        raise HTTPException(status_code=400, detail="An index with this filename already exists.")
+    # # Check if a document with the same filename already exists
+    # search_result = es_client.search(
+    #     index=ELASTICSEARCH_LEGAL_DOCUMENT_INDEX,
+    #     query={
+    #         "constant_score": {
+    #             "filter": {
+    #                 "term": {
+    #                     "filenames": legal_document_create.filenames
+    #                 }
+    #
+    #             }
+    #         }
+    #     }
+    # )
+    #
+    # # If a document with this title exists, raise an error
+    # if search_result["hits"]["total"]["value"] > 0:
+    #     raise HTTPException(status_code=400, detail="An index with this filename already exists.")
 
     # Index the document with an auto-generated ID
     try:
         es_response = es_client.index(index=ELASTICSEARCH_LEGAL_DOCUMENT_INDEX, document=document_data)
     except ApiError as e:
-        raise HTTPException(status_code=e.status_code, detail=e.message)
+        raise HTTPException(status_code=e.status_code, detail=e.body)
 
     result = {
         "es_id": es_response["_id"],
-        "es_filename": legal_document_create.filename,
+        "es_filenames": legal_document_create.filenames,
     }
 
     return result
@@ -107,17 +123,32 @@ def get_upload_legal_document(es_client: ESClientDep, file: UploadFile) -> dict:
     Example of the metadata.json structure would contain information of the pdf files as follows:
     [
         {
-            "title": "Undang-undang Nomor 53 Tahun 2024 Tentang Kota Bukittinggi di Provinsi Sumatera Barat",
+            "title": "Undang-undang Nomor 25 Tahun 2024 Tentang Kota Pematangsiantar di Provinsi Sumatera Utara",
             "jenis_bentuk_peraturan": "UNDANG-UNDANG",
             "pemrakarsa": "PEMERINTAH PUSAT",
-            "nomor": 53,
-            "tahun": 2024,
-            "tentang": "KOTA BUKITTINGGI DI PROVINSI SUMATERA BARAT",
+            "nomor": "25",
+            "tahun": "2024",
+            "tentang": "KOTA PEMATANGSIANTAR DI PROVINSI SUMATERA UTARA",
             "tempat_penetapan": "Jakarta",
-            "ditetapkan_tanggal": "01 Januari 1970",
+            "ditetapkan_tanggal": "02-07-2024",
             "status": "Berlaku",
-            "reference_url": "https://peraturan.go.id/files/uu-no-53-tahun-2024.pdf",
-            "filename": "uu-no-53-tahun-2024.pdf"
+            "mencabut": [
+                "Undang-Undang Darurat Nomor 8 Tahun 1956 Tentang Pembentukan Daerah Otonom Kota-kota Besar, dalam Lingkungan Daerah Propinsi Sumatera Utara"
+            ],
+            "dasar_hukum": [
+                "Undang-Undang Darurat Nomor 8 Tahun 1956 Tentang Pembentukan Daerah Otonom Kota-kota Besar, dalam Lingkungan Daerah Propinsi Sumatera Utara"
+            ],
+            "mengubah": [],
+            "diubah_oleh": [],
+            "melaksanakan_amanat_peraturan": [],
+            "dicabut_oleh": [],
+            "dilaksanakan_oleh_peraturan_pelaksana": [],
+            "filenames": [
+                "uu-no-25-tahun-2024.pdf"
+            ],
+            "reference_urls": [
+                "https://peraturan.go.id/files/uu-no-25-tahun-2024.pdf"
+            ]
         },
         ...
     ]
@@ -136,17 +167,18 @@ def get_upload_legal_document(es_client: ESClientDep, file: UploadFile) -> dict:
 
         "successful_upload": [
             {
-              "id": "5wHSHZIBIi1nR4ibIbSb",
-              "filename": "uu-no-36-tahun-2024.pdf",
-              "resource_url": "https://storage.cloud.google.com/lexin-ta.appspot.com/legal_document/uu-no-36-tahun-2024.pdf"
-            },
-            {
-              "id": "6AHSHZIBIi1nR4ibIrSD",
-              "filename": "uu-no-14-tahun-2024.pdf",
-              "resource_url": "https://storage.cloud.google.com/lexin-ta.appspot.com/legal_document/uu-no-14-tahun-2024.pdf"
+              "id": "SvjnqZIBmvGrAUeOG1CY",
+              "filenames": [
+                "uu-no-53-tahun-2024.pdf"
+              ],
+              "resource_urls": [
+                "https://storage.cloud.google.com/lexin-ta.appspot.com/legal_document/uu-no-53-tahun-2024.pdf"
+              ]
             },
             ...
-        ]
+        ],
+
+        "execution_time": 538.141523361206
     }
     """
     start_time = time.time()
@@ -193,24 +225,17 @@ def parse_legal_document_and_metadata_zip(
 ) -> dict:
     """Upload filenames that are described in the metadata into the system."""
     failed_upload_list = []
-    successful_upload_list = []
+    succeeded_upload_list = []
     filenames_in_metadata_list = []
 
     # Iterate metadata dictionary.
     for metadata in metadata_list:
-        filename = metadata["filename"]
-        filenames_in_metadata_list.append(filename)
+        metadata_parse_result = upload_legal_document_helper(es_client, metadata, zip_file)
 
-        # Read a filename inside the zip file based on the metadata dictionary.
-        with zip_file.open(filename) as extracted_file:
-            try:
-                # Upload legal document to google cloud storage and index to elasticsearch.
-                upload_result = upload_legal_document_helper(es_client, extracted_file, metadata)
-                successful_upload_list.append(upload_result)
+        filenames_in_metadata_list.extend(metadata_parse_result["filename_list"])
+        failed_upload_list.extend(metadata_parse_result["failed_uploads"])
 
-            except HTTPException as e:
-                # Append filenames that failed to upload.
-                failed_upload_list.append({filename: str(e)})
+        succeeded_upload_list.append(metadata_parse_result["succeeded_uploads"])
 
     # Prepare response for filenames with no metadata.
     filename_in_zip_set = set(filenames_in_zip_list)
@@ -223,51 +248,70 @@ def parse_legal_document_and_metadata_zip(
     # Prepare upload response.
     parse_result = {
         "failed_upload": failed_upload_list,
-        "successful_upload": successful_upload_list,
+        "successful_upload": succeeded_upload_list,
     }
 
     return parse_result
 
 
-def upload_legal_document_helper(
-        es_client: ESClientDep, extracted_file: IO[bytes], metadata: dict
-) -> dict:
+def upload_legal_document_helper(es_client: ESClientDep, metadata: dict, zip_file: zipfile) -> dict:
     """Upload PDF files to google cloud storage, extract text, and index it to elasticsearch."""
-    filename = metadata['filename']
 
-    # Upload the PDF to Google Cloud Storage
-    blob_name = f"{GOOGLE_BUCKET_LEGAL_DOCUMENT_FOLDER_NAME}/{filename}"
-    gcs_url = upload_gcs_file(extracted_file, blob_name)
+    resource_urls = []
+    content_list = []
 
-    # At this point, the file pointer is at the end of the file
-    # This is because the file is read first, then uploaded to google cloud storage.
-    # If we try to read again, it will return an empty string or nothing
-    # Reset the pointer to the beginning
-    extracted_file.seek(0)
+    failed_uploads = []
 
-    # Extract text from the PDF
-    pdf_text = extract_text_pdf(extracted_file)
+    filename_list = [filename for filename in metadata["filenames"] if filename]
 
-    # Index the extracted text and GCS URL into Elasticsearch
-    document_data = {
-        "content": pdf_text,
-        "resource_url": gcs_url
-    }
+    # Read a filename inside the zip file based on the metadata dictionary.
+    for filename in filename_list:
+        with zip_file.open(filename) as extracted_file:
+            try:
+                # Upload the PDF to Google Cloud Storage
+                blob_name = f"{GOOGLE_BUCKET_LEGAL_DOCUMENT_FOLDER_NAME}/{filename}"
+                gcs_url = upload_gcs_file(GOOGLE_BUCKET_NAME, extracted_file, blob_name)
 
-    # Update document data with the metadata.
-    document_data.update(metadata)
+                # Reset the pointer to the beginning
+                extracted_file.seek(0)
+
+                # Extract text from the PDF
+                pdf_text = extract_text_pdf(extracted_file)
+
+                resource_urls.append(gcs_url)
+                content_list.append(pdf_text)
+
+            except HTTPException as e:
+                # Append filenames that failed to upload.
+                failed_uploads.append({filename: str(e)})
+
+    # Create document data from metadata and upload results.
+    document_data = metadata
+    document_data["resource_urls"] = resource_urls
+    document_data["content"] = content_list
 
     # Send index document request.
     es_response = index_legal_document(es_client, document_data)
 
-    # Prepare return dictionary.
-    upload_result = {
+    # try:
+    #     es_response = index_legal_document(es_client, document_data)
+    # except HTTPException as e:
+    #     failed_uploads.append({filename: str(e)})
+
+    metadata_result = {
         "id": es_response["es_id"],
-        "filename": es_response["es_filename"],
-        "resource_url": gcs_url
+        "filenames": document_data["filenames"],
+        "resource_urls": document_data["resource_urls"]
     }
 
-    return upload_result
+    # Prepare return response.
+    result = {
+        "filename_list": filename_list,
+        "failed_uploads": failed_uploads,
+        "succeeded_uploads": metadata_result,
+    }
+
+    return result
 
 
 def get_download_legal_document(es_client: ESClientDep, view_mode: bool, document_id: str) -> StreamingResponse:
@@ -282,7 +326,7 @@ def get_download_legal_document(es_client: ESClientDep, view_mode: bool, documen
         raise HTTPException(status_code=404, detail="Document not found")
 
     # Get the GCS URL
-    gcs_url = document.get("resource_url")
+    gcs_url = document.get("resource_urls")[0]
     if not gcs_url:
         raise HTTPException(status_code=404, detail="Resource URL not found")
 
@@ -292,7 +336,7 @@ def get_download_legal_document(es_client: ESClientDep, view_mode: bool, documen
     blob_name = "/".join(url_splits[4:])
     blob_file_name = url_splits[-1]
 
-    downloaded_file = download_gcs_file(blob_name)
+    downloaded_file = download_gcs_file(GOOGLE_BUCKET_NAME, blob_name)
 
     if view_mode:
         # Select header to view the pdf file.
@@ -317,19 +361,35 @@ def search_legal_document_detail_by_id(es_client: ESClientDep, document_id: str)
         "_id": "cgHSHZIBIi1nR4ibuLUH",
         "_score": 1,
         "_source": {
-            "content": "full text content of the pdf file."
-            "resource_url": "https://storage.cloud.google.com/lexin-ta.appspot.com/legal_document/uu-no-1-tahun-2024.pdf",
-            "title": "Undang-undang Nomor 1 Tahun 2024 Tentang Perubahan Kedua Atas Undang-undang Nomor 11 Tahun 2008 Tentang Informasi dan Transaksi Elektronik",
+            "title": "Undang-undang Nomor 25 Tahun 2024 Tentang Kota Pematangsiantar di Provinsi Sumatera Utara",
             "jenis_bentuk_peraturan": "UNDANG-UNDANG",
             "pemrakarsa": "PEMERINTAH PUSAT",
-            "nomor": "1",
+            "nomor": "25",
             "tahun": "2024",
-            "tentang": "PERUBAHAN KEDUA ATAS UNDANG-UNDANG NOMOR 11 TAHUN 2008 TENTANG INFORMASI DAN TRANSAKSI ELEKTRONIK",
+            "tentang": "KOTA PEMATANGSIANTAR DI PROVINSI SUMATERA UTARA",
             "tempat_penetapan": "Jakarta",
-            "ditetapkan_tanggal": "02 Januari 2024",
+            "ditetapkan_tanggal": "02-07-2024",
             "status": "Berlaku",
-            "reference_url": "https://peraturan.go.id/files/uu-no-1-tahun-2024.pdf",
-            "filename": "uu-no-1-tahun-2024.pdf"
+            "dasar_hukum": [
+                "Undang-Undang Darurat Nomor 8 Tahun 1956 Tentang Pembentukan Daerah Otonom Kota-kota Besar, dalam Lingkungan Daerah Propinsi Sumatera Utara"
+            ],
+            "mengubah": [],
+            "diubah_oleh": [],
+            "mencabut": [
+                "Undang-Undang Darurat Nomor 8 Tahun 1956 Tentang Pembentukan Daerah Otonom Kota-kota Besar, dalam Lingkungan Daerah Propinsi Sumatera Utara"
+            ],
+            "dicabut_oleh": [],
+            "melaksanakan_amanat_peraturan": [],
+            "dilaksanakan_oleh_peraturan_pelaksana": [],
+            "filenames": [
+                "uu-no-25-tahun-2024.pdf"
+            ],
+            "reference_urls": [
+                "https://peraturan.go.id/files/uu-no-25-tahun-2024.pdf"
+            ],
+            "content": [
+                "full text content of this file"
+            ]
         }
     }
     """
@@ -384,10 +444,10 @@ def search_multiple_legal_document_by_id_list(es_client: ESClientDep, document_i
         },
         source={
             "excludes": [
-                "filename",
+                "filenames",
                 "content",
-                "reference_url",
-                "resource_url"
+                "reference_urls",
+                "resource_urls"
             ]
         }
 
@@ -430,11 +490,16 @@ def search_multiple_legal_document_by_content(
         },
         # Exclude fields on the return search query value.
         "source": {
-            "excludes": [
-                "filename",
-                "content",
-                "reference_url",
-                "resource_url"
+            "includes": [
+                "title",
+                "jenis_bentuk_peraturan",
+                "pemrakarsa",
+                "nomor",
+                "tahun",
+                "tentang",
+                "tempat_penetapan",
+                "nomditetapkan_tanggalor",
+                "status"
             ]
         },
         # Aggregates all unique values of a field, also return it's count based on the search query.
