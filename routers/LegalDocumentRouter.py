@@ -84,6 +84,13 @@ def search_multiple_legal_document_by_content(
     return search_result
 
 
+@router.get("/distinct-of-field")
+def get_legal_document_distinct_of_field(es_client: ESClientDep, field: str, size: int = 16) -> list[dict]:
+    distinct_of_field = LegalDocumentService.get_legal_document_distinct_value_of_field(es_client, field, size)
+
+    return distinct_of_field
+
+
 @router.post("/bookmark", response_model=LegalDocumentBookmarkRead)
 def create_legal_document_bookmark(
     *, session: SessionDep, token_payload: JWTDecodeDep, legal_document_bookmark_create: LegalDocumentBookmarkCreate

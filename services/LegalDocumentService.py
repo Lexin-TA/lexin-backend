@@ -558,6 +558,30 @@ def search_multiple_legal_document_by_content(
     return pagination_res
 
 
+def get_legal_document_distinct_value_of_field(es_client: ESClientDep, field: str, size: int = 16):
+    """Return a size amount of unique value of a field in legal document (defaults to size=16)."""
+    try:
+        es_response = es_client.search(
+            index=ELASTICSEARCH_LEGAL_DOCUMENT_INDEX,
+            size=0,
+            aggs={
+                "uniques": {
+                    "terms": {
+                        "field": field,
+                        "size": size
+                    }
+                }
+            }
+        )
+    except ApiError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.body)
+
+    # Extracting document hits and aggregations.
+    es_buckets = es_response["aggregations"]["uniques"]["buckets"]
+
+    return es_buckets
+
+
 def get_create_legal_document_bookmark(
         session: Session, token_payload: JWTDecodeDep, legal_document_bookmark_create: LegalDocumentBookmarkCreate
 ) -> LegalDocumentBookmark:

@@ -12,7 +12,7 @@ runtime_config:
 env: flex
 
 # Specify command to start the application.
-entrypoint: fastapi dev main.py
+entrypoint: gunicorn -k uvicorn.workers.UvicornWorker main:app
 
 # Specify resource to be used for instances.
 resources:
