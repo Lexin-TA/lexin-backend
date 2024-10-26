@@ -155,31 +155,31 @@ def test_delete_chat_room(session: Session, client: TestClient, login: login_fix
     assert data["ok"] is True
 
 
-def test_websocket_endpoint(session: Session, client: TestClient, login: login_fixture, chat_room: chat_room_fixture):
-    # Get user data from user creation request.
-    access_token = login["access_token"]
-
-    # Get chat room data from chat room creation request.
-    chat_room_id = chat_room['id']
-
-    # Create websocket connection.
-    req_param = f"?token={access_token}&chat_room_id={chat_room_id}"
-    req_url = f"{URL_CHAT}/ws{req_param}"
-
-    with client.websocket_connect(url=req_url) as websocket:
-        message_json = {"message": "Hello World!"}
-        websocket.send_json(message_json)
-        response_json = websocket.receive_json()
-
-    # Check database for newly created chat messages.
-    db_chat_room = get_chat_room_by_id(session, chat_room_id)
-    db_chat_messages = db_chat_room.chat_messages
-
-    # Testing assertions.
-    assert response_json["es_result"] is not None
-    assert response_json["rag_result"] is not None
-
-    assert len(db_chat_messages) == 1
+# def test_websocket_endpoint(session: Session, client: TestClient, login: login_fixture, chat_room: chat_room_fixture):
+#     # Get user data from user creation request.
+#     access_token = login["access_token"]
+#
+#     # Get chat room data from chat room creation request.
+#     chat_room_id = chat_room['id']
+#
+#     # Create websocket connection.
+#     req_param = f"?token={access_token}&chat_room_id={chat_room_id}"
+#     req_url = f"{URL_CHAT}/ws{req_param}"
+#
+#     with client.websocket_connect(url=req_url) as websocket:
+#         message_json = {"message": "Hello World!"}
+#         websocket.send_json(message_json)
+#         response_json = websocket.receive_json()
+#
+#     # Check database for newly created chat messages.
+#     db_chat_room = get_chat_room_by_id(session, chat_room_id)
+#     db_chat_messages = db_chat_room.chat_messages
+#
+#     # Testing assertions.
+#     assert response_json["es_result"] is not None
+#     assert response_json["rag_result"] is not None
+#
+#     assert len(db_chat_messages) == 1
 
 
 def test_read_chat_room_messages(

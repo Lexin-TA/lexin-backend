@@ -25,7 +25,7 @@ def delete_legal_document_mappings(es_client: ESClientDep):
 
 
 @router.delete("/files")
-def delete_legal_document_files():
+def delete_all_legal_document_files():
     delete_files_result = LegalDocumentService.get_delete_all_legal_document_files()
 
     return delete_files_result
@@ -39,19 +39,25 @@ def upload_legal_document(es_client: ESClientDep, file: UploadFile) -> dict:
 
 
 @router.get("/download/{document_id}")
-def download_legal_document(es_client: ESClientDep, document_id: str) -> StreamingResponse:
-    download_result = LegalDocumentService.get_download_legal_document(es_client,
-                                                                       view_mode=False,
-                                                                       document_id=document_id)
+def download_legal_document(es_client: ESClientDep, document_id: str, resource_index: int = 0) -> StreamingResponse:
+    download_result = LegalDocumentService.get_download_legal_document(
+        es_client,
+        view_mode=False,
+        document_id=document_id,
+        resource_index=resource_index
+    )
 
     return download_result
 
 
 @router.get("/view/{document_id}")
 def view_legal_document_file(es_client: ESClientDep, document_id: str) -> StreamingResponse:
-    view_result = LegalDocumentService.get_download_legal_document(es_client,
-                                                                   view_mode=True,
-                                                                   document_id=document_id)
+    view_result = LegalDocumentService.get_download_legal_document(
+        es_client,
+        view_mode=True,
+        document_id=document_id
+    )
+
     return view_result
 
 
@@ -70,13 +76,13 @@ def get_legal_document_by_id(es_client: ESClientDep, document_id: str) -> dict:
 
 
 @router.get("/search")
-def search_multiple_legal_document_by_content(
+def search_multiple_legal_document(
         es_client: ESClientDep, query: str, page: int = Query(1, ge=1), size: int = Query(10, ge=1),
         jenis_bentuk_peraturan: str = None,
         status: str = None,
         sort: str = "_score"
 ) -> dict:
-    search_result = LegalDocumentService.search_multiple_legal_document_by_content(
+    search_result = LegalDocumentService.search_multiple_legal_document(
         es_client, query, page, size,
         jenis_bentuk_peraturan, status, sort
     )
@@ -104,19 +110,23 @@ def create_legal_document_bookmark(
 
 @router.get("/bookmark")
 def read_legal_document_bookmark_by_user(*, session: SessionDep, token_payload: JWTDecodeDep, es_client: ESClientDep):
-    db_legal_document_bookmarks = LegalDocumentService.get_read_legal_document_bookmark_by_user(session,
-                                                                                                token_payload,
-                                                                                                es_client)
+    bookmarks = LegalDocumentService.get_read_legal_document_bookmark_by_user(
+        session,
+        token_payload,
+        es_client
+    )
 
-    return db_legal_document_bookmarks
+    return bookmarks
 
 
 @router.delete("/bookmark/{document_id}")
 def delete_legal_document_bookmark_by_document_id(
         *, session: SessionDep, token_payload: JWTDecodeDep, document_id: str
 ):
-    delete_response = LegalDocumentService.get_delete_legal_document_bookmark_by_document_id(session,
-                                                                                             token_payload,
-                                                                                             document_id)
+    delete_response = LegalDocumentService.get_delete_legal_document_bookmark_by_document_id(
+        session,
+        token_payload,
+        document_id
+    )
 
     return delete_response
