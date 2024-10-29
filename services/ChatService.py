@@ -3,14 +3,17 @@ from typing import Sequence
 
 import httpx
 from dotenv import load_dotenv
+from pydantic import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session, select
 from fastapi import WebSocket, WebSocketDisconnect, HTTPException, status, WebSocketException
 
 from internal.auth import JWTDecodeDep, jwt_decode_access
 from internal.elastic import ESClientDep
+from internal.message_broker import publish_message_with_response
 from internal.websocket import WebSocketManager
-from models.ChatMessageModel import ChatMessageCreate, ChatMessage
+from models.ChatMessageModel import ChatMessageCreate, ChatMessage, ChatMessageBase, ChatMessageQueryDocument, \
+    ChatMessageInference, ChatMessageInferenceQuestion
 from models.ChatRoomModel import ChatRoomCreate, ChatRoom, ChatRoomUpdate
 from services.LegalDocumentService import search_multiple_legal_document
 
@@ -19,7 +22,8 @@ load_dotenv()
 
 RAG_URL = os.getenv('RAG_URL')
 
-manager = WebSocketManager()
+# Initialize websocket manager.
+websocket_manager = WebSocketManager()
 
 
 # Websocket endpoint for generative search chat with RAG endpoint.
@@ -30,61 +34,126 @@ async def get_websocket_endpoint(
     token_payload = jwt_decode_access(token)
     user_id = token_payload.get('sub')
 
-    db_chat_room = is_user_owner_of_chat_room(session, user_id, chat_room_id)
-    if db_chat_room is False:
+    db_chat_room = get_chat_room_by_id(session, chat_room_id)
+
+    is_owner = is_user_owner_of_chat_room(user_id, db_chat_room)
+    if is_owner is False:
         raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION)
 
     # Add websocket connection to WebSocketManager.
-    await manager.connect(websocket, chat_room_id)
+    await websocket_manager.connect(websocket, chat_room_id)
 
     try:
         while True:
             # Receive question string from frontend service.
             user_question_dict = await websocket.receive_json()
-            user_question_str = user_question_dict["message"]
+            user_question = str(user_question_dict["question"])
 
             # Search legal documents with the user prompt.
-            es_hits = search_multiple_legal_document(es_client, user_question_str)
+            es_hits = search_multiple_legal_document(es_client, user_question)
 
             # Send user prompt to RAG inference endpoint.
-            rag_answer_dict = await get_rag_inference_endpoint(user_question_dict)
-            rag_answer_str = rag_answer_dict["message"]
+            rag_answer_dict = publish_message_with_response(user_question_dict)
+            rag_answer = str(rag_answer_dict["answer"])
 
             # Save user question and rag answer to database.
-            chat_message_create = ChatMessageCreate(question=user_question_str,
-                                                    answer=rag_answer_str)
+            chat_message_create = ChatMessageCreate(question=user_question,
+                                                    answer=rag_answer)
             _ = create_chat_message(session, chat_message_create, chat_room_id)
 
             # Broadcast message json to frontend (in case of multiple tabs in browser).
             response_json = {
                 "es_result": es_hits,
-                "rag_result": rag_answer_str
+                "rag_result": rag_answer
             }
-            await manager.broadcast(response_json, chat_room_id)
+            await websocket_manager.broadcast(response_json, chat_room_id)
 
     except WebSocketDisconnect:
-        manager.disconnect(chat_room_id)
+        websocket_manager.disconnect(chat_room_id)
 
 
-# Send user prompt to RAG inference endpoint.
-async def get_rag_inference_endpoint(question: dict):
-    url = RAG_URL
+def get_chat_history_helper(
+        session: Session,
+        token_payload: JWTDecodeDep,
+        chat_room_id: int,
+):
+    # Check if current user is owner of chat room.
+    user_id = token_payload.get('sub')
+    db_chat_room = get_chat_room_by_id(session, chat_room_id)
 
-    async with httpx.AsyncClient() as client:
-        try:
-            response = await client.post(url, json=question)
-            response.raise_for_status()
-            response_data = response.json()
+    is_owner = is_user_owner_of_chat_room(user_id, db_chat_room)
+    if is_owner is False:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Could not validate credentials")
 
-            return response_data
+    # Return chat messages.
+    db_chat_messages = db_chat_room.chat_messages
 
-        except httpx.RequestError as exc:
-            # This block catches network-related errors (e.g., DNS failures, refused connections).
-            return {"message": f"Request to external API failed: {str(exc)}"}
+    return db_chat_messages
 
-        except httpx.HTTPStatusError as exc:
-            # This block catches cases where the external API responds with a 4xx or 5xx error status code.
-            return {"message": f"Error response from external API {str(exc)}"}
+
+def get_chat_documents_helper(
+        session: Session,
+        token_payload: JWTDecodeDep,
+        chat_room_id: int,
+        message: ChatMessageQueryDocument,
+        es_client: ESClientDep,
+        page: int | None,
+        size: int | None,
+        jenis_bentuk_peraturan: str | None,
+        document_status: str | None,
+        sort: str | None,
+):
+    # Check if current user is owner of chat room.
+    user_id = token_payload.get('sub')
+    db_chat_room = get_chat_room_by_id(session, chat_room_id)
+
+    is_owner = is_user_owner_of_chat_room(user_id, db_chat_room)
+    if is_owner is False:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Could not validate credentials")
+
+    # do search.
+    legal_documents = search_multiple_legal_document(
+        es_client=es_client, query=message.question, page=page, size=size,
+        jenis_bentuk_peraturan=jenis_bentuk_peraturan,
+        status=document_status,
+        sort=sort
+    )
+
+    return legal_documents
+
+
+def get_chat_inference_helper(
+        session: Session,
+        token_payload: JWTDecodeDep,
+        chat_room_id: int,
+        message: ChatMessageInferenceQuestion
+):
+    # Check if current user is owner of chat room.
+    user_id = token_payload.get('sub')
+    db_chat_room = get_chat_room_by_id(session, chat_room_id)
+
+    is_owner = is_user_owner_of_chat_room(user_id, db_chat_room)
+    if is_owner is False:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Could not validate credentials")
+
+    # Add chat history
+    db_chat_messages = db_chat_room.chat_messages
+
+    chat_message_inference = ChatMessageInference(
+        question=message.question,
+        chat_history=db_chat_messages
+    )
+
+    # Validate the model.
+    try:
+        _ = ChatMessageInferenceQuestion.model_validate(chat_message_inference)
+    except ValidationError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+
+    # Do inference.
+    inference = publish_message_with_response(chat_message_inference.dict())
+
+    return inference
 
 
 # Create chat room with the user's initial prompt as the title.
@@ -110,9 +179,10 @@ def get_update_chat_room_bookmark(
 ) -> ChatRoom:
     # Check if current user is owner of chat room.
     user_id = token_payload.get('sub')
-    db_chat_room = is_user_owner_of_chat_room(session, user_id, chat_room_id)
+    db_chat_room = get_chat_room_by_id(session, chat_room_id)
 
-    if db_chat_room is False:
+    is_owner = is_user_owner_of_chat_room(user_id, db_chat_room)
+    if is_owner is False:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Could not validate credentials")
 
     # Update chat room with new data.
@@ -162,21 +232,20 @@ def get_read_chat_room_bookmark_by_user_id(
 
     return db_chat_rooms
 
-# Receive all messages in a chat room by its id.
-def get_read_chat_room_message_by_chat_room_id(
+
+# Receive chat room details by its id.
+def get_read_chat_room_by_id(
         session: Session, token_payload: JWTDecodeDep, chat_room_id: int
-) -> Sequence[ChatMessage]:
+) -> ChatRoom:
     # Check if current user is owner of chat room.
     user_id = token_payload.get('sub')
-    db_chat_room = is_user_owner_of_chat_room(session, user_id, chat_room_id)
+    db_chat_room = get_chat_room_by_id(session, chat_room_id)
 
-    if db_chat_room is False:
+    is_owner = is_user_owner_of_chat_room(user_id, db_chat_room)
+    if is_owner is False:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Could not validate credentials")
 
-    # Return chat messages.
-    db_chat_messages = db_chat_room.chat_messages
-
-    return db_chat_messages
+    return db_chat_room
 
 
 # Get chat room by its id.
@@ -196,9 +265,10 @@ def get_delete_chat_room_by_id(session: Session, token_payload: JWTDecodeDep, ch
     try:
         # Check if current user owns the chat room.
         user_id = token_payload.get("sub")
-        db_chat_room = is_user_owner_of_chat_room(session, user_id, chat_room_id)
+        db_chat_room = get_chat_room_by_id(session, chat_room_id)
 
-        if db_chat_room is False:
+        is_owner = is_user_owner_of_chat_room(user_id, db_chat_room)
+        if is_owner is False:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Could not validate credentials")
 
         # Execute delete chat room.
@@ -228,17 +298,15 @@ def create_chat_message(session: Session, chat_message_create: ChatMessageCreate
 
 
 # Check if current user is owner of chat room.
-def is_user_owner_of_chat_room(session, user_id: int, chat_room_id: id):
-    db_chat_room = get_chat_room_by_id(session, chat_room_id)
-
+def is_user_owner_of_chat_room(user_id: int, db_chat_room: ChatRoom):
     # Check if there is a chat room with the id.
     if not db_chat_room:
         return False
 
+    # Check if the user owns the chat room .
     chat_room_user_id = db_chat_room.user_id
 
-    # Check if the user owns the chat room .
     if user_id != chat_room_user_id:
         return False
 
-    return db_chat_room
+    return True

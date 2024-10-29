@@ -9,12 +9,12 @@ from fastapi import Depends
 # Load Environment Variables.
 load_dotenv()
 
-ELASTICSEARCH_HOST = os.getenv('ELASTICSEARCH_HOST')
+ELASTICSEARCH_URL = os.getenv('ELASTICSEARCH_URL')
 ELASTICSEARCH_API_KEY = os.getenv('ELASTICSEARCH_API_KEY')
 
 # Initialize Elasticsearch client.
 es_client = Elasticsearch(
-    hosts=ELASTICSEARCH_HOST,
+    hosts=ELASTICSEARCH_URL,
     api_key=ELASTICSEARCH_API_KEY
 )
 

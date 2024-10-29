@@ -8,7 +8,6 @@ from models.ChatRoomModel import ChatRoom
 # Base model.
 class ChatMessageBase(SQLModel):
     question: str
-    answer: str
 
 
 # Database model used for tables in the db.
@@ -17,6 +16,7 @@ class ChatMessage(ChatMessageBase, table=True):
 
     # Attributes.
     id: int | None = Field(default=None, primary_key=True)
+    answer: str
     creation_time: datetime = Field(default=datetime.now(timezone.utc))
     chat_room_id: int = Field(foreign_key='chat_room.id')
 
@@ -26,8 +26,21 @@ class ChatMessage(ChatMessageBase, table=True):
 
 # Data model used for requests/responses in the application.
 class ChatMessageCreate(ChatMessageBase):
-    pass
+    answer: str
 
 
 class ChatMessageRead(ChatMessageBase):
+    answer: str
     creation_time: datetime
+
+
+class ChatMessageQueryDocument(ChatMessageBase):
+    pass
+
+
+class ChatMessageInferenceQuestion(ChatMessageBase):
+    pass
+
+
+class ChatMessageInference(ChatMessageBase):
+    chat_history: list[ChatMessageRead] | None = None
