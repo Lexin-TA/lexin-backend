@@ -210,7 +210,8 @@ jobs:
         username: ${{ secrets.GCE_USERNAME }}
         key: ${{ secrets.GCE_SSH_KEY }}
         source: ./docker-compose.yml
-        target: home/ichsan_khay/lexin-backend
+        target: /lexin-backend
+        rm: true
 
     - name: SSH into GCE and deploy with Docker Compose
       uses: appleboy/ssh-action@v1.1.0
