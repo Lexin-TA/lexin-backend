@@ -49,11 +49,9 @@ async def get_websocket_endpoint(
             user_question_dict = await websocket.receive_json()
             user_question = str(user_question_dict["question"])
 
-            # Search legal documents with the user prompt.
-            es_hits = search_multiple_legal_document(es_client, user_question)
-
             # Send user prompt to RAG inference endpoint.
-            rag_answer_dict = publish_message_with_response(user_question_dict)
+            message = ChatMessageInferenceQuestion(question=user_question)
+            rag_answer_dict = get_chat_inference_helper(session, token_payload, chat_room_id, message)
             rag_answer = str(rag_answer_dict["answer"])
 
             # Save user question and rag answer to database.
@@ -63,7 +61,6 @@ async def get_websocket_endpoint(
 
             # Broadcast message json to frontend (in case of multiple tabs in browser).
             response_json = {
-                "es_result": es_hits,
                 "rag_result": rag_answer
             }
             await websocket_manager.broadcast(response_json, chat_room_id)

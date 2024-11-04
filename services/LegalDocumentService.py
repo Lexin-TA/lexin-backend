@@ -1,6 +1,7 @@
 import json
 import math
 import os
+import re
 import zipfile
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -57,19 +58,63 @@ def get_delete_all_legal_document_files():
     return delete_response
 
 
-def extract_text_pdf(file: IO[bytes]) -> str:
+def is_all_uppercase_sentence(text):
+    # At least one uppercase letter, in addition to allowing numbers and special characters.
+    pattern = r"^(?=.*[A-Z])[A-Z0-9\W]+$"
+
+    # Use re.fullmatch to ensure the entire string matches the pattern
+    return bool(re.fullmatch(pattern, text))
+
+
+def extract_text_pdf(file: IO[bytes]) -> list[dict[str, str]]:
     """Extracts text from a PDF file using PyMuPDF."""
+    text_list = []
+
     try:
         pdf_data = file.read()
         pdf_document = fitz.open(stream=pdf_data, filetype="pdf")
 
-        text = ""
         for page in pdf_document:
-            text += page.get_text()
-    except Exception as e:
-        raise HTTPException(status_code=422, detail=str(e))
+            words = page.get_text("words", sort=True)   # words sorted vertical, then horizontal
+            line = [words[0]]                           # list of words in same line
 
-    return text
+            for w in words[1:]:
+                # get previous word
+                w0 = line[-1]
+
+                # same line (approx. same bottom coord)
+                if abs(w0[3] - w[3]) <= 3:
+                    line.append(w)
+
+                # new line starts
+                else:
+                    line.sort(key=lambda w: w[0])           # sort words in line left-to-right
+                    text = " ".join([w[4] for w in line])   # text of line
+                    line = [w]                              # init line list again
+
+                    # add to output list
+                    text_type = "title" if is_all_uppercase_sentence(text) else "paragraph"
+                    text_dict = {
+                        "type": text_type,
+                        "content": text
+                    }
+                    text_list.append(text_dict)
+
+            # last line
+            text = " ".join([w[4] for w in line])
+
+            # add last line to output list
+            text_type = "title" if is_all_uppercase_sentence(text) else "paragraph"
+            text_dict = {
+                "type": text_type,
+                "content": text
+            }
+            text_list.append(text_dict)
+
+    except Exception as e:
+        return text_list
+
+    return text_list
 
 
 def index_legal_document(es_client: ESClientDep, document_data: dict):
@@ -95,9 +140,14 @@ def index_legal_document(es_client: ESClientDep, document_data: dict):
     if search_result["hits"]["total"]["value"] > 0:
         raise HTTPException(status_code=400, detail="An index with this filename already exists.")
 
-    # Index the document with an auto-generated ID
+    # Pop "id" from the document_data and use it as an index to elasticsearch
+    slug_id = document_data.pop("id")
+
+    # Index the document
     try:
-        es_response = es_client.index(index=ELASTICSEARCH_LEGAL_DOCUMENT_INDEX, document=document_data)
+        es_response = es_client.index(
+            index=ELASTICSEARCH_LEGAL_DOCUMENT_INDEX, id=slug_id, document=document_data
+        )
     except ApiError as e:
         raise HTTPException(status_code=e.status_code, detail=e.body)
 
@@ -358,7 +408,10 @@ def upload_single_file_to_gcs(parse: Dict[str, Any]) -> tuple:
 def cleanup_failed_upload(blob_list: List[str]):
     """Delete files in Google Cloud Storage if upload fails."""
     for blob_name in blob_list:
-        delete_file(GOOGLE_BUCKET_NAME, blob_name)
+        try:
+            delete_file(GOOGLE_BUCKET_NAME, blob_name)
+        except:
+            continue
 
 
 def build_failed_upload_response(metadata: Dict[str, Any], message: str) -> Dict[str, Any]:

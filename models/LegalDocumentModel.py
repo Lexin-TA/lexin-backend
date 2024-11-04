@@ -7,6 +7,7 @@ from sqlmodel import SQLModel
 # Legal document model for indexing to and from elasticsearch
 class LegalDocumentBase(SQLModel):
     # Concise mappings.
+    id: str
     title: str
     jenis_bentuk_peraturan: str
     pemrakarsa: str
@@ -25,21 +26,21 @@ class LegalDocumentBase(SQLModel):
     nomor_tambahan: int | None
     pejabat_pengundangan: str | None
 
-    dasar_hukum: list[str]
+    dasar_hukum: list[dict[str, str]]
 
-    mengubah: list[str]
-    diubah_oleh: list[str]
-    mencabut: list[str]
-    dicabut_oleh: list[str]
+    mengubah: list[dict[str, str]]
+    diubah_oleh: list[dict[str, str]]
+    mencabut: list[dict[str, str]]
+    dicabut_oleh: list[dict[str, str]]
 
-    melaksanakan_amanat_peraturan: list[str]
-    dilaksanakan_oleh_peraturan_pelaksana: list[str]
+    melaksanakan_amanat_peraturan: list[dict[str, str]]
+    dilaksanakan_oleh_peraturan_pelaksana: list[dict[str, str]]
 
     filenames: list[str]
     resource_urls: list[str]
     reference_urls: list[str]
 
-    content: list[str]
+    content: list[list[dict[str, str]]]
 
 
 class LegalDocumentCreate(LegalDocumentBase):
@@ -52,6 +53,9 @@ class LegalDocumentRead(LegalDocumentBase):
 
 # Elasticsearch mappings used for initial index creation of legal documents.
 ELASTICSEARCH_LEGAL_DOCUMENT_MAPPINGS = {
+    "settings": {
+        "index.mapping.nested_objects.limit": 20000
+    },
     "mappings": {
         "properties": {
             # Concise mappings.
@@ -73,21 +77,69 @@ ELASTICSEARCH_LEGAL_DOCUMENT_MAPPINGS = {
             "nomor_tambahan": {"type": "integer"},
             "pejabat_pengundangan": {"type": "keyword"},
 
-            "dasar_hukum": {"type": "text"},    # This is an array of strings.
+            "dasar_hukum": {
+                "type": "nested",
+                "properties": {
+                    "id": {"type": "text"},
+                    "title": {"type": "text"},
+                }
+            },
 
-            "mengubah": {"type": "text"},       # This is an array of strings.
-            "diubah_oleh": {"type": "text"},    # This is an array of strings.
-            "mencabut": {"type": "text"},       # This is an array of strings.
-            "dicabut_oleh": {"type": "text"},   # This is an array of strings.
+            "mengubah": {
+                "type": "nested",
+                "properties": {
+                    "id": {"type": "text"},
+                    "title": {"type": "text"},
+                }
+            },
+            "diubah_oleh": {
+                "type": "nested",
+                "properties": {
+                    "id": {"type": "text"},
+                    "title": {"type": "text"},
+                }
+            },
+            "mencabut": {
+                "type": "nested",
+                "properties": {
+                    "id": {"type": "text"},
+                    "title": {"type": "text"},
+                }
+            },
+            "dicabut_oleh": {
+                "type": "nested",
+                "properties": {
+                    "id": {"type": "text"},
+                    "title": {"type": "text"},
+                }
+            },
 
-            "melaksanakan_amanat_peraturan": {"type": "text"},          # This is an array of strings.
-            "dilaksanakan_oleh_peraturan_pelaksana": {"type": "text"},  # This is an array of strings.
+            "melaksanakan_amanat_peraturan": {
+                "type": "nested",
+                "properties": {
+                    "id": {"type": "text"},
+                    "title": {"type": "text"},
+                }
+            },
+            "dilaksanakan_oleh_peraturan_pelaksana": {
+                "type": "nested",
+                "properties": {
+                    "id": {"type": "text"},
+                    "title": {"type": "text"},
+                }
+            },
 
             "filenames": {"type": "keyword"},       # This is an array of strings.
             "resource_urls": {"type": "text"},      # This is an array of strings.
             "reference_urls": {"type": "text"},     # This is an array of strings.
 
-            "content": {"type": "text"},            # This is an array of strings.
+            "content": {
+                "type": "nested",
+                "properties": {
+                    "type": {"type": "text"},
+                    "content": {"type": "text"},
+                }
+            },
         }
     }
 }
