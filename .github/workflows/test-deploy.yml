@@ -210,7 +210,7 @@ jobs:
         username: ${{ secrets.GCE_USERNAME }}
         key: ${{ secrets.GCE_SSH_KEY }}
         source: ./docker-compose.yml
-        target: /lexin-backend
+        target: ~/lexin-backend
         rm: true
 
     - name: SSH into GCE and deploy with Docker Compose
@@ -220,7 +220,7 @@ jobs:
         username: ${{ secrets.GCE_USERNAME }}
         key: ${{ secrets.GCE_SSH_KEY }}
         script: |
-          cd /lexin-backend       # Path on GCE instance to docker compose
-          docker-compose pull     # Pull the latest images
-          docker-compose build    # Rebuild the services
-          docker-compose up -d    # Start services in detached mode
+          cd ~/lexin-backend      # Path on GCE instance to docker compose
+          docker compose pull     # Pull the latest images
+          docker compose build    # Rebuild the services
+          docker compose up -d    # Start services in detached mode
