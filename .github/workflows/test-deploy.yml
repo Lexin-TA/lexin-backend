@@ -76,85 +76,85 @@ jobs:
           coverage xml
         
 
-#  deploy-app-engine:
-#    needs: test
-#    runs-on: ubuntu-latest
-#
-#    env:
-#      SECRET_KEY: ${{ secrets.SECRET_KEY }}
-#
-#      JWT_ACCESS_SECRET_KEY: ${{ secrets.JWT_ACCESS_SECRET_KEY }}
-#      JWT_REFRESH_SECRET_KEY: ${{ secrets.JWT_REFRESH_SECRET_KEY }}
-#
-#      GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
-#      GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
-#      GOOGLE_REDIRECT_URI: ${{ secrets.GOOGLE_REDIRECT_URI }}
-#
-#      GOOGLE_CLOUD_STORAGE_URI: ${{ secrets.GOOGLE_CLOUD_STORAGE_URI }}
-#      GOOGLE_BUCKET_NAME: ${{ secrets.GOOGLE_BUCKET_NAME }}
-#      GOOGLE_BUCKET_LEGAL_DOCUMENT_FOLDER_NAME: ${{ secrets.GOOGLE_BUCKET_LEGAL_DOCUMENT_FOLDER_NAME }}
-#
-#      FRONTEND_URL: ${{ secrets.FRONTEND_URL }}
-#      RAG_URL: ${{ secrets.RAG_URL }}
-#
-#      DATABASE_USER: ${{ secrets.DATABASE_USER }}
-#      DATABASE_PASS: ${{ secrets.DATABASE_PASS }}
-#      DATABASE_PORT: ${{ secrets.DATABASE_PORT }}
-#      DATABASE_NAME: ${{ secrets.DATABASE_NAME }}
-#      DATABASE_HOST: ${{ secrets.DATABASE_HOST }}
-#
-#      ELASTICSEARCH_HOST: ${{ secrets.ELASTICSEARCH_HOST }}
-#      ELASTICSEARCH_API_KEY: ${{ secrets.ELASTICSEARCH_API_KEY }}
-#      ELASTICSEARCH_USERNAME: ${{ secrets.ELASTICSEARCH_USERNAME }}
-#      ELASTICSEARCH_PASSWORD: ${{ secrets.ELASTICSEARCH_PASSWORD }}
-#      ELASTICSEARCH_LEGAL_DOCUMENT_INDEX: ${{ secrets.ELASTICSEARCH_LEGAL_DOCUMENT_INDEX }}
-#
-#      RABBITMQ_HOST: ${{ secrets.RABBITMQ_HOST }}
-#      RABBITMQ_PORT: ${{ secrets.RABBITMQ_PORT }}
-#      RABBITMQ_USER: ${{ secrets.RABBITMQ_USER }}
-#      RABBITMQ_PASS: ${{ secrets.RABBITMQ_PASS }}
-#
-#      RABBITMQ_QUEUE: ${{ secrets.RABBITMQ_QUEUE }}
-#      RABBITMQ_EXCHANGE: ${{ secrets.RABBITMQ_EXCHANGE }}
-#      RABBITMQ_ROUTING_KEY: ${{ secrets.RABBITMQ_ROUTING_KEY }}
-#
-#    steps:
-#    - name: Checkout
-#      uses: actions/checkout@v4
-#
-#    - name: Install Python 3
-#      uses: actions/setup-python@v5
-#      with:
-#        python-version: '3.12'
-#
-#    - name: Install dependencies
-#      run: |
-#        python -m pip install --upgrade pip
-#        pip install -r requirements.txt
-#
-#    - name: Create Google Application Credentials json
-#      uses: jsdaniell/create-json@1.1.2
-#      with:
-#        name: "GOOGLE_APPLICATION_CREDENTIALS.json"
-#        json: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
-#
-#    - name: GCP authentication
-#      uses: google-github-actions/auth@v2
-#      with:
-#        credentials_json: '${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}'
-#
-#    - name: Set environment variables to app.yaml
-#      uses: 73h/gae-app-yaml-replace-env-variables@v0.3
-#      with:
-#        app_yaml_path: "app.yaml"
-#
-#    - name: Set up cloud SDK
-#      uses: google-github-actions/setup-gcloud@v2
-#      with:
-#        version: '>= 363.0.0'
-#
-#    - name: Use gcloud to deploy to service instance
-#      run: gcloud app deploy app.yaml --quiet
+  deploy-app-engine:
+    needs: test
+    runs-on: ubuntu-latest
+
+    env:
+      SECRET_KEY: ${{ secrets.SECRET_KEY }}
+
+      JWT_ACCESS_SECRET_KEY: ${{ secrets.JWT_ACCESS_SECRET_KEY }}
+      JWT_REFRESH_SECRET_KEY: ${{ secrets.JWT_REFRESH_SECRET_KEY }}
+
+      GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+      GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+      GOOGLE_REDIRECT_URI: ${{ secrets.GOOGLE_REDIRECT_URI }}
+
+      GOOGLE_CLOUD_STORAGE_URI: ${{ secrets.GOOGLE_CLOUD_STORAGE_URI }}
+      GOOGLE_BUCKET_NAME: ${{ secrets.GOOGLE_BUCKET_NAME }}
+      GOOGLE_BUCKET_LEGAL_DOCUMENT_FOLDER_NAME: ${{ secrets.GOOGLE_BUCKET_LEGAL_DOCUMENT_FOLDER_NAME }}
+
+      FRONTEND_URL: ${{ secrets.FRONTEND_URL }}
+      RAG_URL: ${{ secrets.RAG_URL }}
+
+      DATABASE_USER: ${{ secrets.DATABASE_USER }}
+      DATABASE_PASS: ${{ secrets.DATABASE_PASS }}
+      DATABASE_PORT: ${{ secrets.DATABASE_PORT }}
+      DATABASE_NAME: ${{ secrets.DATABASE_NAME }}
+      DATABASE_HOST: ${{ secrets.DATABASE_HOST }}
+
+      ELASTICSEARCH_URL: ${{ secrets.ELASTICSEARCH_URL }}
+      ELASTICSEARCH_API_KEY: ${{ secrets.ELASTICSEARCH_API_KEY }}
+      ELASTICSEARCH_USERNAME: ${{ secrets.ELASTICSEARCH_USERNAME }}
+      ELASTICSEARCH_PASSWORD: ${{ secrets.ELASTICSEARCH_PASSWORD }}
+      ELASTICSEARCH_LEGAL_DOCUMENT_INDEX: ${{ secrets.ELASTICSEARCH_LEGAL_DOCUMENT_INDEX }}
+
+      RABBITMQ_HOST: ${{ secrets.RABBITMQ_HOST }}
+      RABBITMQ_PORT: ${{ secrets.RABBITMQ_PORT }}
+      RABBITMQ_USER: ${{ secrets.RABBITMQ_USER }}
+      RABBITMQ_PASS: ${{ secrets.RABBITMQ_PASS }}
+
+      RABBITMQ_QUEUE: ${{ secrets.RABBITMQ_QUEUE }}
+      RABBITMQ_EXCHANGE: ${{ secrets.RABBITMQ_EXCHANGE }}
+      RABBITMQ_ROUTING_KEY: ${{ secrets.RABBITMQ_ROUTING_KEY }}
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Install Python 3
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Create Google Application Credentials json
+      uses: jsdaniell/create-json@1.1.2
+      with:
+        name: "GOOGLE_APPLICATION_CREDENTIALS.json"
+        json: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
+
+    - name: GCP authentication
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: '${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}'
+
+    - name: Set environment variables to app.yaml
+      uses: 73h/gae-app-yaml-replace-env-variables@v0.3
+      with:
+        app_yaml_path: "app.yaml"
+
+    - name: Set up cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+      with:
+        version: '>= 363.0.0'
+
+    - name: Use gcloud to deploy to service instance
+      run: gcloud app deploy app.yaml --quiet
 
 
   deploy-compute-engine:
