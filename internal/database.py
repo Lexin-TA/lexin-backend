@@ -10,14 +10,14 @@ from models import *
 # Load Environment Variables.
 load_dotenv()
 
-DB_USER = os.getenv('DB_USER')
-DB_PASS = os.getenv('DB_PASS')
-DB_HOST = os.getenv('DB_HOST')
-DB_PORT = os.getenv('DB_PORT')
-DB_NAME = os.getenv('DB_NAME')
+DATABASE_USER = os.getenv('DATABASE_USER')
+DATABASE_PASS = os.getenv('DATABASE_PASS')
+DATABASE_HOST = os.getenv('DATABASE_HOST')
+DATABASE_PORT = os.getenv('DATABASE_PORT')
+DATABASE_NAME = os.getenv('DATABASE_NAME')
 
-DB_URL = f"postgresql://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-DB_ENGINE = create_engine(DB_URL, echo=True)
+DATABASE_URL = f"postgresql://{DATABASE_USER}:{DATABASE_PASS}@{DATABASE_HOST}:{DATABASE_PORT}/{DATABASE_NAME}"
+DB_ENGINE = create_engine(DATABASE_URL, echo=True)
 
 
 # Database Session and Table Creation.

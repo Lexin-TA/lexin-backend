@@ -12,6 +12,44 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
+    env:
+      SECRET_KEY: ${{ secrets.SECRET_KEY }}
+
+      JWT_ACCESS_SECRET_KEY: ${{ secrets.JWT_ACCESS_SECRET_KEY }}
+      JWT_REFRESH_SECRET_KEY: ${{ secrets.JWT_REFRESH_SECRET_KEY }}
+
+      GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+      GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+      GOOGLE_REDIRECT_URI: ${{ secrets.GOOGLE_REDIRECT_URI }}
+
+      GOOGLE_CLOUD_STORAGE_URI: ${{ secrets.GOOGLE_CLOUD_STORAGE_URI }}
+      GOOGLE_BUCKET_NAME: ${{ secrets.GOOGLE_BUCKET_NAME }}
+      GOOGLE_BUCKET_LEGAL_DOCUMENT_FOLDER_NAME: ${{ secrets.GOOGLE_BUCKET_LEGAL_DOCUMENT_FOLDER_NAME }}
+
+      FRONTEND_URL: ${{ secrets.FRONTEND_URL }}
+      RAG_URL: ${{ secrets.RAG_URL }}
+
+      DATABASE_USER: ${{ secrets.DATABASE_USER }}
+      DATABASE_PASS: ${{ secrets.DATABASE_PASS }}
+      DATABASE_PORT: ${{ secrets.DATABASE_PORT }}
+      DATABASE_NAME: ${{ secrets.DATABASE_NAME }}
+      DATABASE_HOST: ${{ secrets.DATABASE_HOST }}
+
+      ELASTICSEARCH_URL: ${{ secrets.ELASTICSEARCH_URL }}
+      ELASTICSEARCH_API_KEY: ${{ secrets.ELASTICSEARCH_API_KEY }}
+      ELASTICSEARCH_USERNAME: ${{ secrets.ELASTICSEARCH_USERNAME }}
+      ELASTICSEARCH_PASSWORD: ${{ secrets.ELASTICSEARCH_PASSWORD }}
+      ELASTICSEARCH_LEGAL_DOCUMENT_INDEX: ${{ secrets.ELASTICSEARCH_LEGAL_DOCUMENT_INDEX }}
+
+      RABBITMQ_HOST: ${{ secrets.RABBITMQ_HOST }}
+      RABBITMQ_PORT: ${{ secrets.RABBITMQ_PORT }}
+      RABBITMQ_USER: ${{ secrets.RABBITMQ_USER }}
+      RABBITMQ_PASS: ${{ secrets.RABBITMQ_PASS }}
+
+      RABBITMQ_QUEUE: ${{ secrets.RABBITMQ_QUEUE }}
+      RABBITMQ_EXCHANGE: ${{ secrets.RABBITMQ_EXCHANGE }}
+      RABBITMQ_ROUTING_KEY: ${{ secrets.RABBITMQ_ROUTING_KEY }}
+
     steps:
     - name: Checkout
       uses: actions/checkout@v4
@@ -37,31 +75,3 @@ jobs:
         coverage run --omit="main.py,internal/**,**/__init__.py,**/tests/**" -m pytest ./
         coverage report
         coverage xml
-      env:
-        DB_USER: ${{ secrets.DB_USER }}
-        DB_PASS: ${{ secrets.DB_PASS }}
-        DB_PORT: ${{ secrets.DB_PORT }}
-        DB_NAME: ${{ secrets.DB_NAME }}
-        DB_HOST: ${{ secrets.DB_HOST }}
-
-        SECRET_KEY: ${{ secrets.SECRET_KEY }}
-
-        JWT_ACCESS_SECRET_KEY: ${{ secrets.JWT_ACCESS_SECRET_KEY }}
-        JWT_REFRESH_SECRET_KEY: ${{ secrets.JWT_REFRESH_SECRET_KEY }}
-
-        GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
-        GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
-        GOOGLE_REDIRECT_URI: ${{ secrets.GOOGLE_REDIRECT_URI }}
-
-        GOOGLE_CLOUD_STORAGE_URI: ${{ secrets.GOOGLE_CLOUD_STORAGE_URI }}
-        GOOGLE_BUCKET_NAME: ${{ secrets.GOOGLE_BUCKET_NAME }}
-        GOOGLE_BUCKET_LEGAL_DOCUMENT_FOLDER_NAME: ${{ secrets.GOOGLE_BUCKET_LEGAL_DOCUMENT_FOLDER_NAME }}
-
-        FRONTEND_URL: ${{ secrets.FRONTEND_URL }}
-        RAG_URL: ${{ secrets.RAG_URL }}
-
-        ELASTICSEARCH_HOST: ${{ secrets.ELASTICSEARCH_HOST }}
-        ELASTICSEARCH_API_KEY: ${{ secrets.ELASTICSEARCH_API_KEY }}
-        ELASTICSEARCH_USERNAME: ${{ secrets.ELASTICSEARCH_USERNAME }}
-        ELASTICSEARCH_PASSWORD: ${{ secrets.ELASTICSEARCH_PASSWORD }}
-        ELASTICSEARCH_LEGAL_DOCUMENT_INDEX: ${{ secrets.ELASTICSEARCH_LEGAL_DOCUMENT_INDEX }}

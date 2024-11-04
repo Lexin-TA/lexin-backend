@@ -1,0 +1,122 @@
+services:
+  # frontend:
+  #   build: ./frontend
+  #   container_name: frontend
+  #   ports:
+  #     - "3000:3000"
+  #   environment:
+  #     - NEXT_PUBLIC_BACKEND_URL=http://backend:8000
+  #   depends_on:
+  #     - backend
+
+  backend:
+    image: navalgaze/lexin-backend:latest
+    container_name: backend
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+      - elasticsearch
+      - rabbitmq
+    environment:
+      - SECRET_KEY=${SECRET_KEY}
+
+      - JWT_ACCESS_SECRET_KEY=${JWT_ACCESS_SECRET_KEY}
+      - JWT_REFRESH_SECRET_KEY=${JWT_REFRESH_SECRET_KEY}
+
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - GOOGLE_REDIRECT_URI=${GOOGLE_REDIRECT_URI}
+
+      - GOOGLE_CLOUD_STORAGE_URI=${GOOGLE_CLOUD_STORAGE_URI}
+      - GOOGLE_BUCKET_NAME=${GOOGLE_BUCKET_NAME}
+      - GOOGLE_BUCKET_LEGAL_DOCUMENT_FOLDER_NAME=${GOOGLE_BUCKET_LEGAL_DOCUMENT_FOLDER_NAME}
+
+      - FRONTEND_URL=${FRONTEND_URL}
+      - RAG_URL=${RAG_URL}
+
+      - DATABASE_USER=${DATABASE_USER}
+      - DATABASE_PASS=${DATABASE_PASS}
+      - DATABASE_HOST=postgres
+      - DATABASE_PORT=${DATABASE_PORT}
+      - DATABASE_NAME=${DATABASE_NAME}
+
+      - ELASTICSEARCH_URL=http://elasticsearch:9200
+      - ELASTICSEARCH_LEGAL_DOCUMENT_INDEX=${ELASTICSEARCH_LEGAL_DOCUMENT_INDEX}
+
+      - RABBITMQ_HOST=amqp://rabbitmq
+      - RABBITMQ_PORT=${RABBITMQ_PORT}
+      - RABBITMQ_USER=${RABBITMQ_USER}
+      - RABBITMQ_PASS=${RABBITMQ_PASS}
+
+      - RABBITMQ_QUEUE=${RABBITMQ_QUEUE}
+      - RABBITMQ_EXCHANGE=${RABBITMQ_EXCHANGE}
+      - RABBITMQ_ROUTING_KEY=${RABBITMQ_ROUTING_KEY}
+
+    networks:
+      - app-network
+
+
+  postgres:
+    image: postgres:17
+    container_name: postgres
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=${DATABASE_USER}
+      - POSTGRES_PASSWORD=${DATABASE_PASS}
+      - POSTGRES_DB=${DATABASE_NAME}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - app-network
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.3
+    container_name: elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+    ports:
+      - "9200:9200"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    networks:
+      - app-network
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.15.3
+    container_name: kibana
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    ports:
+      - "5601:5601"
+    depends_on:
+      - elasticsearch
+    networks:
+      - app-network
+
+  rabbitmq:
+    image: rabbitmq:4-management
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASS}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - app-network
+
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  elasticsearch_data:
+  rabbitmq_data:
+
