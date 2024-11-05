@@ -204,22 +204,13 @@ jobs:
         echo "RABBITMQ_EXCHANGE=${{ secrets.RABBITMQ_EXCHANGE }}" >> .env
         echo "RABBITMQ_ROUTING_KEY=${{ secrets.RABBITMQ_ROUTING_KEY }}" >> .env        
 
-    - name: Copy .env to GCE
+    - name: Copy docker-compose.yml and .env to GCE
       uses: appleboy/scp-action@v0.1.5
       with:
         host: ${{ secrets.GCE_HOST }}
         username: ${{ secrets.GCE_USERNAME }}
         key: ${{ secrets.GCE_SSH_KEY }}
-        source: ./.env
-        target: ~/lexin-backend
-
-    - name: Copy docker-compose.yml to GCE
-      uses: appleboy/scp-action@v0.1.7
-      with:
-        host: ${{ secrets.GCE_HOST }}
-        username: ${{ secrets.GCE_USERNAME }}
-        key: ${{ secrets.GCE_SSH_KEY }}
-        source: ./docker-compose.yml
+        source: ".env, docker-compose.yml"
         target: ~/lexin-backend
 
     - name: SSH into GCE and deploy with Docker Compose

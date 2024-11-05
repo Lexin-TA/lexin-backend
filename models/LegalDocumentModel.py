@@ -40,7 +40,8 @@ class LegalDocumentBase(SQLModel):
     resource_urls: list[str]
     reference_urls: list[str]
 
-    content: list[list[dict[str, str]]]
+    content_type: list[list[str]]
+    content_text: list[list[str]]
 
 
 class LegalDocumentCreate(LegalDocumentBase):
@@ -133,13 +134,9 @@ ELASTICSEARCH_LEGAL_DOCUMENT_MAPPINGS = {
             "resource_urls": {"type": "text"},      # This is an array of strings.
             "reference_urls": {"type": "text"},     # This is an array of strings.
 
-            "content": {
-                "type": "nested",
-                "properties": {
-                    "type": {"type": "text"},
-                    "content": {"type": "text"},
-                }
-            },
+            "content_type": {"type": "keyword"},    # This is an array of strings.
+            "content_text": {"type": "keyword"},    # This is an array of strings.
+
         }
     }
 }
