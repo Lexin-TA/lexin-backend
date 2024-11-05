@@ -349,7 +349,7 @@ jobs:
         proxy_port: ${{ secrets.KAWUNG_PORT }}
         proxy_key: ${{ secrets.KAWUNG_SSH_KEY }}
         proxy_username: ${{ secrets.KAWUNG_USERNAME }}
-        proxy_password: ${{ secrets.KAWUNG_PASSWORD }}
+        proxy_passphrase: ${{ secrets.KAWUNG_PASSPHRASE }}
         script: |    
           docker login -u=${{ secrets.DOCKER_USERNAME }} -p=${{ secrets.DOCKER_PASSWORD }}
           
