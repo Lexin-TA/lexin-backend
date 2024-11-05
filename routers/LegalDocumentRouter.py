@@ -61,18 +61,24 @@ def view_legal_document_file(es_client: ESClientDep, document_id: str) -> Stream
     return view_result
 
 
-@router.get("/detail-full/{document_id}")
+@router.get("/detail/{document_id}")
 def get_legal_document_by_id(es_client: ESClientDep, document_id: str) -> dict:
     search_result = LegalDocumentService.search_legal_document_detail_by_id(es_client, document_id)
 
     return search_result
 
 
-# @router.post("/detail-concise/")
-# def get_multiple_legal_document_by_id_list(es_client: ESClientDep, document_id_list: list[str]) -> list[dict]:
-#     search_result = LegalDocumentService.search_multiple_legal_document_by_id_list(es_client, document_id_list)
-#
-#     return search_result
+@router.get("/detail-content/{document_id}")
+def get_legal_document_content_by_id(
+        es_client: ESClientDep, document_id: str, resource_index: int = 0,
+        page_number: int = Query(1, ge=1), page_size: int = Query(25, ge=1)
+) -> list[dict]:
+    search_result = LegalDocumentService.search_legal_document_content_by_id(
+        es_client, document_id, resource_index,
+        page_number, page_size
+    )
+
+    return search_result
 
 
 @router.get("/search")

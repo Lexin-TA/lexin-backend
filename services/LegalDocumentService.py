@@ -66,9 +66,11 @@ def is_all_uppercase_sentence(text):
     return bool(re.fullmatch(pattern, text))
 
 
-def extract_text_pdf(file: IO[bytes]) -> list[dict[str, str]]:
-    """Extracts text from a PDF file using PyMuPDF."""
-    text_list = []
+def extract_text_pdf(file: IO[bytes]) -> dict[str, list[str]]:
+    """Extracts text from a PDF file using PyMuPDF, dividing it into it's text and corresponding text type."""
+
+    content_type_list = []
+    content_text_list = []
 
     try:
         pdf_data = file.read()
@@ -94,27 +96,29 @@ def extract_text_pdf(file: IO[bytes]) -> list[dict[str, str]]:
 
                     # add to output list
                     text_type = "title" if is_all_uppercase_sentence(text) else "paragraph"
-                    text_dict = {
-                        "type": text_type,
-                        "content": text
-                    }
-                    text_list.append(text_dict)
+
+                    content_type_list.append(text_type)
+                    content_text_list.append(text)
 
             # last line
             text = " ".join([w[4] for w in line])
 
             # add last line to output list
             text_type = "title" if is_all_uppercase_sentence(text) else "paragraph"
-            text_dict = {
-                "type": text_type,
-                "content": text
-            }
-            text_list.append(text_dict)
+
+            content_type_list.append(text_type)
+            content_text_list.append(text)
 
     except Exception as e:
-        return text_list
+        pass
 
-    return text_list
+    # Prepare return dictionary.
+    content = {
+        "content_type": content_type_list,
+        "content_text": content_text_list
+    }
+
+    return content
 
 
 def index_legal_document(es_client: ESClientDep, document_data: dict):
@@ -331,21 +335,46 @@ def upload_legal_document_helper(
         return build_failed_upload_response(metadata, str(e))
 
     # Upload parsed files in parallel to Google Cloud Storage
-    resource_urls, content_list, blob_list = upload_files_to_gcs_in_parallel(parse_result)
+    upload_result = upload_files_to_gcs_in_parallel(parse_result)
 
     # Prepare and index document data
-    document_data = {**metadata, "resource_urls": resource_urls, "content": content_list}
+    document_data = {
+        **metadata,
+        "resource_urls": upload_result["resource_urls"],
+        "content_type": upload_result["content_type_list"],
+        "content_text": upload_result["content_text_list"]
+    }
+
     try:
         es_response = index_legal_document(es_client, document_data)
     except Exception as e:
-        cleanup_failed_upload(blob_list)
+        cleanup_failed_upload(upload_result["blob_list"])
         return build_failed_upload_response(document_data, str(e))
 
     return build_succeeded_upload_response(document_data, es_response["es_id"])
 
 
 def parse_files_in_metadata(metadata: Dict[str, Any], zip_file: zipfile.ZipFile) -> List[Dict[str, Any]]:
-    """Parse files based on metadata, extracting text and reading file content in parallel."""
+    """Parse files based on metadata, extracting text and reading file content in parallel.
+
+    parse_result = [
+        {
+            "filename": "some file name",
+            "content_type": ["title", "title", "paragraph", ...],
+            "content_text": ["some title", "another title", "some paragraph", ...],
+            "file": BytesIO
+        },
+        {
+            "filename": "some file name",
+            "content_type": ["title", "title", "paragraph", ...],
+            "content_text": ["some title", "another title", "some paragraph", ...],
+            "file": BytesIO
+        },
+        ...
+
+    ]
+    """
+
     parse_result = []
 
     with ThreadPoolExecutor() as executor:
@@ -363,20 +392,23 @@ def parse_files_in_metadata(metadata: Dict[str, Any], zip_file: zipfile.ZipFile)
 def parse_single_file(filename: str, zip_file: zipfile.ZipFile) -> Dict[str, Any]:
     """Extract text and content of a single file from the zip."""
     with zip_file.open(filename) as file:
-        pdf_text = extract_text_pdf(file)
+        extractions = extract_text_pdf(file)
         file.seek(0)
+
         return {
             "filename": filename,
-            "content": pdf_text,
-            "file": BytesIO(file.read())
+            "file": BytesIO(file.read()),
+            "content_type": extractions["content_type"],
+            "content_text": extractions["content_text"]
         }
 
 
-def upload_files_to_gcs_in_parallel(parse_result: List[Dict[str, Any]]) -> tuple:
+def upload_files_to_gcs_in_parallel(parse_result: List[Dict[str, Any]]) -> dict[str, list[Any]]:
     """Upload files to Google Cloud Storage in parallel and return resource URLs, content, and blob names."""
     resource_urls = []
-    content_list = []
     blob_list = []
+    content_type_list = []
+    content_text_list = []
 
     with ThreadPoolExecutor() as executor:
         future_to_upload = {
@@ -385,24 +417,41 @@ def upload_files_to_gcs_in_parallel(parse_result: List[Dict[str, Any]]) -> tuple
         }
 
         for future in as_completed(future_to_upload):
-            gcs_url, content, blob_name = future.result()
-            resource_urls.append(gcs_url)
-            content_list.append(content)
-            blob_list.append(blob_name)
+            single_upload = future.result()
 
-    return resource_urls, content_list, blob_list
+            resource_urls.append(single_upload["gcs_url"])
+            blob_list.append(single_upload["blob_name"])
+            content_type_list.append(single_upload["content_type"])
+            content_text_list.append(single_upload["content_text"])
+
+    upload_result = {
+        "resource_urls": resource_urls,
+        "blob_list": blob_list,
+        "content_type_list": content_type_list,
+        "content_text_list": content_text_list
+    }
+
+    return upload_result
 
 
-def upload_single_file_to_gcs(parse: Dict[str, Any]) -> tuple:
+def upload_single_file_to_gcs(parse: Dict[str, Any]) -> dict[str, str | Any]:
     """Upload a single file to Google Cloud Storage and return its URL, content, and blob name."""
     filename = parse["filename"]
     file_byte = parse["file"]
-    content = parse["content"]
+    content_type = parse["content_type"]
+    content_text = parse["content_text"]
 
     blob_name = f"{GOOGLE_BUCKET_LEGAL_DOCUMENT_FOLDER_NAME}/{filename}"
     gcs_url = upload_file(GOOGLE_BUCKET_NAME, file_byte, blob_name)
 
-    return gcs_url, content, blob_name
+    upload_single_result = {
+        "gcs_url": gcs_url,
+        "blob_name": blob_name,
+        "content_type": content_type,
+        "content_text": content_text
+    }
+
+    return upload_single_result
 
 
 def cleanup_failed_upload(blob_list: List[str]):
@@ -477,7 +526,7 @@ def get_download_legal_document(
 
 
 def search_legal_document_detail_by_id(es_client: ESClientDep, document_id: str) -> dict:
-    """Retrieve a single legal document with all of its metadata by id.
+    """Retrieve a single legal document with all of its metadata except it's text contents, by id.
 
     The return value of this function is a dictionary as follows:
     {
@@ -521,27 +570,64 @@ def search_legal_document_detail_by_id(es_client: ESClientDep, document_id: str)
             "resource_urls": [
                 "https://storage.cloud.google.com/lexin-ta.appspot.com/legal_document/uu4-2020bt.pdf",
                 "https://storage.cloud.google.com/lexin-ta.appspot.com/legal_document/uu4-2020pjl.pdf"
-            ],
-            "content": [
-                "content of uu4-2020bt.pdf",
-                "content of uu4-2020pjl.pdf"
             ]
         }
     }
     """
 
     # Retrieve the documents from Elasticsearch.
-    search_result = es_client.search(
-        index=ELASTICSEARCH_LEGAL_DOCUMENT_INDEX,
-        query={
-            "ids": {
-                "values": document_id
-            }
-        }
-    )
-    document_hits = search_result["hits"]["hits"][0]
+    try:
+        get_result = es_client.get(
+            index=ELASTICSEARCH_LEGAL_DOCUMENT_INDEX,
+            id=document_id,
+            source_excludes=["content_type", "content_text"]
+        )
+    except ApiError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message)
 
-    return document_hits
+    # Get the document source
+    document_source = get_result["_source"]
+
+    return document_source
+
+
+def search_legal_document_content_by_id(
+        es_client: ESClientDep, document_id: str, resource_index: int = 0,
+        page_number: int = 1, page_size: int = 25
+):
+    # Retrieve the documents from Elasticsearch.
+    try:
+        get_result = es_client.get(
+            index=ELASTICSEARCH_LEGAL_DOCUMENT_INDEX,
+            id=document_id,
+            source_includes=["content_type", "content_text"]
+        )
+    except ApiError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message)
+
+    # Calculate start and end indices
+    start = (page_number - 1) * page_size
+    end = start + page_size
+
+    # Slice the array for the current page
+    content_type = get_result["_source"]["content_type"][resource_index]
+    content_text = get_result["_source"]["content_text"][resource_index]
+
+    content_type_paged = content_type[start:end]
+    content_text_paged = content_text[start:end]
+
+    # Prepare return value.
+    text_list = []
+
+    for i in range(len(content_type_paged)):
+        formatted_text = {
+            "type": content_type_paged[i],
+            "content": content_text_paged[i]
+        }
+
+        text_list.append(formatted_text)
+
+    return text_list
 
 
 def search_multiple_legal_document_by_id_list(es_client: ESClientDep, document_id: list[str]) -> list[dict]:
