@@ -206,6 +206,12 @@ jobs:
         
         echo "DOCKER_IMAGE_BACKEND=${{ secrets.DOCKER_IMAGE_BACKEND }}" >> .env
 
+    - name: Create Google Application Credentials json
+      uses: jsdaniell/create-json@1.1.2
+      with:
+        name: "GOOGLE_APPLICATION_CREDENTIALS.json"
+        json: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
+
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v2
 
@@ -220,7 +226,7 @@ jobs:
         docker build -t ${{ secrets.DOCKER_IMAGE_BACKEND }} .
         docker push ${{ secrets.DOCKER_IMAGE_BACKEND }}
 
-    - name: Copy docker-compose.yml and .env to GCE
+    - name: Copy .env and docker-compose.yml to GCE
       uses: appleboy/scp-action@v0.1.5
       with:
         host: ${{ secrets.GCE_HOST }}
