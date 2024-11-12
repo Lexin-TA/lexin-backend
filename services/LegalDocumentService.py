@@ -129,25 +129,21 @@ def index_legal_document(es_client: ESClientDep, document_data: dict):
     except ValidationError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
-    # Check if a document with the same filename already exists
-    search_result = es_client.search(
+    # Check if a document with the same id already exists.
+    exists_result = es_client.exists(
         index=ELASTICSEARCH_LEGAL_DOCUMENT_INDEX,
-        size=0,
-        query={
-            "terms": {
-                "filenames": legal_document_create.filenames
-            }
-        }
+        id=legal_document_create.id,
+        source=False
     )
 
-    # If a document with this title exists, raise an error
-    if search_result["hits"]["total"]["value"] > 0:
-        raise HTTPException(status_code=400, detail="An index with this filename already exists.")
+    # If a document with this id exists, raise an error.
+    if exists_result:
+        raise HTTPException(status_code=422, detail=f"A document with id {legal_document_create.id} already exists.")
 
-    # Pop "id" from the document_data and use it as an index to elasticsearch
+    # Pop "id" from the document_data and use it as an index to elasticsearch.
     slug_id = document_data.pop("id")
 
-    # Index the document
+    # Index the document.
     try:
         es_response = es_client.index(
             index=ELASTICSEARCH_LEGAL_DOCUMENT_INDEX, id=slug_id, document=document_data
@@ -347,9 +343,12 @@ def upload_legal_document_helper(
 
     try:
         es_response = index_legal_document(es_client, document_data)
-    except Exception as e:
-        cleanup_failed_upload(upload_result["blob_list"])
-        return build_failed_upload_response(document_data, str(e))
+    except HTTPException as e:
+        if e.status_code == 422:
+            return build_failed_upload_response(document_data, str(e))
+        else:
+            cleanup_failed_upload(upload_result["blob_list"])
+            return build_failed_upload_response(document_data, str(e))
 
     return build_succeeded_upload_response(document_data, es_response["es_id"])
 
