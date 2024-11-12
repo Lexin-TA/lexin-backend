@@ -11,7 +11,7 @@ class LegalDocumentBase(SQLModel):
     title: str
     jenis_bentuk_peraturan: str
     pemrakarsa: str
-    nomor: int
+    nomor: str
     tahun: int
     tentang: str
     tempat_penetapan: str
@@ -63,7 +63,7 @@ ELASTICSEARCH_LEGAL_DOCUMENT_MAPPINGS = {
             "title": {"type": "text"},
             "jenis_bentuk_peraturan": {"type": "keyword"},
             "pemrakarsa": {"type": "keyword"},
-            "nomor": {"type": "integer"},
+            "nomor": {"type": "keyword"},
             "tahun": {"type": "integer"},
             "tentang": {"type": "text"},
             "tempat_penetapan": {"type": "keyword"},

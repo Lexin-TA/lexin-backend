@@ -10,7 +10,7 @@ services:
   #     - backend
 
   backend:
-    image: navalgaze/lexin-backend:latest
+    image: ${DOCKER_IMAGE_BACKEND}
     container_name: backend
     ports:
       - "8000:8000"

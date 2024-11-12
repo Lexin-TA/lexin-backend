@@ -202,9 +202,31 @@ jobs:
         
         echo "RABBITMQ_QUEUE=${{ secrets.RABBITMQ_QUEUE }}" >> .env
         echo "RABBITMQ_EXCHANGE=${{ secrets.RABBITMQ_EXCHANGE }}" >> .env
-        echo "RABBITMQ_ROUTING_KEY=${{ secrets.RABBITMQ_ROUTING_KEY }}" >> .env        
+        echo "RABBITMQ_ROUTING_KEY=${{ secrets.RABBITMQ_ROUTING_KEY }}" >> .env
+        
+        echo "DOCKER_IMAGE_BACKEND=${{ secrets.DOCKER_IMAGE_BACKEND }}" >> .env
 
-    - name: Copy docker-compose.yml and .env to GCE
+    - name: Create Google Application Credentials json
+      uses: jsdaniell/create-json@1.1.2
+      with:
+        name: "GOOGLE_APPLICATION_CREDENTIALS.json"
+        json: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+
+    - name: Log in to Docker Registry
+      uses: docker/login-action@v2
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+
+    - name: Build and push backend image
+      run: |
+        docker build -t ${{ secrets.DOCKER_IMAGE_BACKEND }} .
+        docker push ${{ secrets.DOCKER_IMAGE_BACKEND }}
+
+    - name: Copy .env and docker-compose.yml to GCE
       uses: appleboy/scp-action@v0.1.5
       with:
         host: ${{ secrets.GCE_HOST }}
@@ -219,8 +241,120 @@ jobs:
         host: ${{ secrets.GCE_HOST }}
         username: ${{ secrets.GCE_USERNAME }}
         key: ${{ secrets.GCE_SSH_KEY }}
-        script: |
-          cd ~/lexin-backend      # Path on GCE instance to docker compose
+        script: |    
+          docker login -u=${{ secrets.DOCKER_USERNAME }} -p=${{ secrets.DOCKER_PASSWORD }}
+          
+          cd ~/lexin-backend      # Path on GCE instance to docker compose 
+          
+          docker compose pull     # Pull the latest images
+          docker compose build    # Rebuild the services
+          docker compose up -d    # Start services in detached mode
+
+
+  deploy-itf:
+    needs: test
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Create .env file
+      run: |
+        echo "SECRET_KEY=${{ secrets.SECRET_KEY }}" >> .env
+        
+        echo "JWT_ACCESS_SECRET_KEY=${{ secrets.JWT_ACCESS_SECRET_KEY }}" >> .env
+        echo "JWT_REFRESH_SECRET_KEY=${{ secrets.JWT_REFRESH_SECRET_KEY }}" >> .env
+        
+        echo "GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}" >> .env
+        echo "GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}" >> .env
+        echo "GOOGLE_REDIRECT_URI=${{ secrets.GOOGLE_REDIRECT_URI }}" >> .env
+        
+        echo "GOOGLE_CLOUD_STORAGE_URI=${{ secrets.GOOGLE_CLOUD_STORAGE_URI }}" >> .env
+        echo "GOOGLE_BUCKET_NAME=${{ secrets.GOOGLE_BUCKET_NAME }}" >> .env
+        echo "GOOGLE_BUCKET_LEGAL_DOCUMENT_FOLDER_NAME=${{ secrets.GOOGLE_BUCKET_LEGAL_DOCUMENT_FOLDER_NAME }}" >> .env
+        
+        echo "FRONTEND_URL=${{ secrets.FRONTEND_URL }}" >> .env
+        echo "RAG_URL=${{ secrets.RAG_URL }}" >> .env
+        
+        echo "DATABASE_USER=${{ secrets.DATABASE_USER }}" >> .env
+        echo "DATABASE_PASS=${{ secrets.DATABASE_PASS }}" >> .env
+        echo "DATABASE_PORT=${{ secrets.DATABASE_PORT }}" >> .env
+        echo "DATABASE_NAME=${{ secrets.DATABASE_NAME }}" >> .env
+        echo "DATABASE_HOST=${{ secrets.DATABASE_HOST }}" >> .env
+        
+        echo "ELASTICSEARCH_URL=${{ secrets.ELASTICSEARCH_URL }}" >> .env
+        echo "ELASTICSEARCH_API_KEY=${{ secrets.ELASTICSEARCH_API_KEY }}" >> .env
+        echo "ELASTICSEARCH_USERNAME=${{ secrets.ELASTICSEARCH_USERNAME }}" >> .env
+        echo "ELASTICSEARCH_PASSWORD=${{ secrets.ELASTICSEARCH_PASSWORD }}" >> .env
+        echo "ELASTICSEARCH_LEGAL_DOCUMENT_INDEX=${{ secrets.ELASTICSEARCH_LEGAL_DOCUMENT_INDEX }}" >> .env
+        
+        echo "RABBITMQ_HOST=${{ secrets.RABBITMQ_HOST }}" >> .env
+        echo "RABBITMQ_PORT=${{ secrets.RABBITMQ_PORT }}" >> .env
+        echo "RABBITMQ_USER=${{ secrets.RABBITMQ_USER }}" >> .env
+        echo "RABBITMQ_PASS=${{ secrets.RABBITMQ_PASS }}" >> .env
+        
+        echo "RABBITMQ_QUEUE=${{ secrets.RABBITMQ_QUEUE }}" >> .env
+        echo "RABBITMQ_EXCHANGE=${{ secrets.RABBITMQ_EXCHANGE }}" >> .env
+        echo "RABBITMQ_ROUTING_KEY=${{ secrets.RABBITMQ_ROUTING_KEY }}" >> .env
+        
+        echo "DOCKER_IMAGE_BACKEND=${{ secrets.DOCKER_IMAGE_BACKEND }}" >> .env
+
+    - name: Create Google Application Credentials json
+      uses: jsdaniell/create-json@1.1.2
+      with:
+        name: "GOOGLE_APPLICATION_CREDENTIALS.json"
+        json: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+
+    - name: Log in to Docker Registry
+      uses: docker/login-action@v2
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+
+    - name: Build and push backend image
+      run: |
+        docker build -t ${{ secrets.DOCKER_IMAGE_BACKEND }} .
+        docker push ${{ secrets.DOCKER_IMAGE_BACKEND }}
+
+    - name: Copy .env and docker-compose.yml to itf vm
+      uses: appleboy/scp-action@v0.1.5
+      with:
+        # Connection to itf
+        host: ${{ secrets.ITF_HOST }}
+        username: ${{ secrets.ITF_USERNAME }}
+        password: ${{ secrets.ITF_PASSWORD }}
+        # Connection to kawung
+        proxy_host: ${{ secrets.KAWUNG_HOST }}
+        proxy_port: ${{ secrets.KAWUNG_PORT }}
+        proxy_key: ${{ secrets.KAWUNG_SSH_KEY }}
+        proxy_username: ${{ secrets.KAWUNG_USERNAME }}
+        proxy_passphrase: ${{ secrets.KAWUNG_PASSPHRASE }}
+        # Source file and target directory
+        source: ".env, docker-compose.yml"
+        target: ~/lexin-backend
+
+    - name: SSH into kawung, then SSH into itf vm, and deploy with Docker Compose
+      uses: appleboy/ssh-action@v1.1.0
+      with:
+        # Connection to itf
+        host: ${{ secrets.ITF_HOST }}
+        username: ${{ secrets.ITF_USERNAME }}
+        password: ${{ secrets.ITF_PASSWORD }}
+        # Connection to kawung
+        proxy_host: ${{ secrets.KAWUNG_HOST }}
+        proxy_port: ${{ secrets.KAWUNG_PORT }}
+        proxy_key: ${{ secrets.KAWUNG_SSH_KEY }}
+        proxy_username: ${{ secrets.KAWUNG_USERNAME }}
+        proxy_passphrase: ${{ secrets.KAWUNG_PASSPHRASE }}
+        script: |    
+          docker login -u=${{ secrets.DOCKER_USERNAME }} -p=${{ secrets.DOCKER_PASSWORD }}
+          
+          cd ~/lexin-backend      # Path on GCE instance to docker compose 
+          
           docker compose pull     # Pull the latest images
           docker compose build    # Rebuild the services
           docker compose up -d    # Start services in detached mode
