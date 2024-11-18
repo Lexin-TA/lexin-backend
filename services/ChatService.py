@@ -15,7 +15,7 @@ from internal.websocket import WebSocketManager
 from models.ChatMessageModel import ChatMessageCreate, ChatMessage, ChatMessageBase, ChatMessageQueryDocument, \
     ChatMessageInference, ChatMessageInferenceQuestion
 from models.ChatRoomModel import ChatRoomCreate, ChatRoom, ChatRoomUpdate
-from services.LegalDocumentService import search_multiple_legal_document
+from services.LegalDocumentService import search_legal_document
 
 # Load Environment Variables.
 load_dotenv()
@@ -109,7 +109,7 @@ def get_chat_documents_helper(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Could not validate credentials")
 
     # do search.
-    legal_documents = search_multiple_legal_document(
+    legal_documents = search_legal_document(
         es_client=es_client, query=message.question, page=page, size=size,
         jenis_bentuk_peraturan=jenis_bentuk_peraturan,
         status=document_status,
