@@ -1,3 +1,5 @@
+from typing import Annotated
+
 from fastapi import APIRouter, UploadFile, Query
 from starlette.responses import StreamingResponse
 
@@ -81,14 +83,23 @@ def get_legal_document_content_by_id(
     return search_result
 
 
+@router.get("/detail-list")
+def get_legal_document_by_id_list(
+        es_client: ESClientDep, document_id: Annotated[list[str], Query()]
+) -> list[dict]:
+    search_result = LegalDocumentService.search_legal_document_detail_by_id_list(es_client, document_id)
+
+    return search_result
+
+
 @router.get("/search")
-def search_multiple_legal_document(
+def search_legal_document(
         es_client: ESClientDep, query: str, page: int = Query(1, ge=1), size: int = Query(10, ge=1),
-        jenis_bentuk_peraturan: str = None,
+        jenis_bentuk_peraturan: Annotated[list[str] | None, Query()] = None,
         status: str = None,
-        sort: str = "_score"
+        sort: str = None
 ) -> dict:
-    search_result = LegalDocumentService.search_multiple_legal_document(
+    search_result = LegalDocumentService.search_legal_document(
         es_client, query, page, size,
         jenis_bentuk_peraturan, status, sort
     )

@@ -172,37 +172,51 @@ def get_upload_legal_document(es_client: ESClientDep, file: UploadFile) -> dict:
     Example of the metadata.json structure would contain information of the pdf files as follows:
     [
         {
-            "title": "Undang-undang Nomor 25 Tahun 2024 Tentang Kota Pematangsiantar di Provinsi Sumatera Utara",
+            "title": "Undang-undang Nomor 1 Tahun 2024",
             "jenis_bentuk_peraturan": "UNDANG-UNDANG",
             "pemrakarsa": "PEMERINTAH PUSAT",
-            "nomor": "25",
-            "tahun": "2024",
-            "tentang": "KOTA PEMATANGSIANTAR DI PROVINSI SUMATERA UTARA",
+            "nomor": "1",
+            "tahun": 2024,
+            "tentang": "PERUBAHAN KEDUA ATAS UNDANG-UNDANG NOMOR 11 TAHUN 2008 TENTANG INFORMASI DAN TRANSAKSI ELEKTRONIK",
             "tempat_penetapan": "Jakarta",
-            "ditetapkan_tanggal": "02-07-2024",
+            "ditetapkan_tanggal": "02-01-2024",
             "pejabat_yang_menetapkan": "JOKO WIDODO",
             "status": "Berlaku",
-            "tahun_pengundangan": "2024",
-            "nomor_pengundangan": "123",
-            "nomor_tambahan": null,
-            "tanggal_pengundangan": "02-07-2024",
+            "tahun_pengundangan": 2024,
+            "tanggal_pengundangan": "02-01-2024",
+            "nomor_pengundangan": 1,
+            "nomor_tambahan": 6905,
             "pejabat_pengundangan": "PRATIKNO",
-            "mencabut": [
-              "Undang-Undang Darurat Nomor 8 Tahun 1956 Tentang Pembentukan Daerah Otonom Kota-kota Besar, dalam Lingkungan Daerah Propinsi Sumatera Utara"
-            ],
             "dasar_hukum": [
-              "Undang-Undang Darurat Nomor 8 Tahun 1956 Tentang Pembentukan Daerah Otonom Kota-kota Besar, dalam Lingkungan Daerah Propinsi Sumatera Utara"
+                {
+                    "id": "undang-undang-nomor-11-tahun-2008",
+                    "title": "Undang-Undang Nomor 11 Tahun 2008 Tentang Informasi dan Transaksi Elektronik"
+                }
             ],
-            "mengubah": [],
+            "mengubah": [
+                {
+                    "id": "undang-undang-nomor-19-tahun-2016",
+                    "title": "Undang-Undang Nomor 19 Tahun 2016 Tentang Perubahan Atas Undang-undang Nomor 11 Tahun 2008 Tentang Informasi dan Transaksi Elektronik"
+                },
+                {
+                    "id": "undang-undang-nomor-11-tahun-2008",
+                    "title": "Undang-Undang Nomor 11 Tahun 2008 Tentang Informasi dan Transaksi Elektronik"
+                }
+            ],
             "diubah_oleh": [],
+            "mencabut": [],
             "dicabut_oleh": [],
             "melaksanakan_amanat_peraturan": [],
             "dilaksanakan_oleh_peraturan_pelaksana": [],
+            "link": "https://peraturan.go.id/id/uu-no-1-tahun-2024",
             "filenames": [
-              "uu-no-25-tahun-2024.pdf"
+                "uu-no-1-tahun-2024.pdf"
             ],
             "reference_urls": [
-              "https://peraturan.go.id/files/uu-no-25-tahun-2024.pdf"
+                "https://peraturan.go.id/files/uu-no-1-tahun-2024.pdf"
+            ],
+            "resource_urls": [
+                "https://storage.cloud.google.com/lexin-ta.appspot.com/legal_document/uu-no-1-tahun-2024.pdf"
             ]
         },
         ...
@@ -212,23 +226,23 @@ def get_upload_legal_document(es_client: ESClientDep, file: UploadFile) -> dict:
     {
         "failed_upload": [
             {
-              "uu4-1983.pdf": "400: A file with this name already exists in storage."
+                "uu4-1983.pdf": "400: A file with this name already exists in storage."
             },
             {
-              "uu1-1956.pdf": "400: A file with this name already exists in storage."
+                "uu1-1956.pdf": "400: A file with this name already exists in storage."
             },
             ...
         ],
 
         "successful_upload": [
             {
-              "id": "SvjnqZIBmvGrAUeOG1CY",
-              "filenames": [
-                "uu-no-53-tahun-2024.pdf"
-              ],
-              "resource_urls": [
-                "https://storage.cloud.google.com/lexin-ta.appspot.com/legal_document/uu-no-53-tahun-2024.pdf"
-              ]
+                "id": "SvjnqZIBmvGrAUeOG1CY",
+                "filenames": [
+                    "uu-no-53-tahun-2024.pdf"
+                ],
+                "resource_urls": [
+                    "https://storage.cloud.google.com/lexin-ta.appspot.com/legal_document/uu-no-53-tahun-2024.pdf"
+                ]
             },
             ...
         ],
@@ -525,52 +539,56 @@ def get_download_legal_document(
 
 
 def search_legal_document_detail_by_id(es_client: ESClientDep, document_id: str) -> dict:
-    """Retrieve a single legal document with all of its metadata except it's text contents, by id.
+    """Retrieve a single legal document by id with all of its metadata except it's text contents.
 
     The return value of this function is a dictionary as follows:
     {
-        "_index": "legal_document",
-        "_id": "tgGXuZIBIi1nR4ibTNYb",
-        "_score": 1,
-        "_source": {
-            "title": "Undang-undang Nomor 4 Tahun 2020 Tentang Pengesahan Persetujuan Antara Pemerintah Republik Indonesia dan Kabinet Menteri Ukraina Tentang Kerja Sama dalam Bidang Pertahanan (agreement Between The Government of The Republic of Indonesia and The Cabinet of Ministers of Ukraine On Cooperation In The Field of Defence)",
-            "jenis_bentuk_peraturan": "UNDANG-UNDANG",
-            "pemrakarsa": "PEMERINTAH PUSAT",
-            "nomor": "4",
-            "tahun": "2020",
-            "tentang": "PENGESAHAN PERSETUJUAN ANTARA PEMERINTAH REPUBLIK INDONESIA DAN KABINET MENTERI UKRAINA TENTANG KERJA SAMA DALAM BIDANG PERTAHANAN (AGREEMENT BETWEEN THE GOVERNMENT OF THE REPUBLIC OF INDONESIA AND THE CABINET OF MINISTERS OF UKRAINE ON COOPERATION IN THE FIELD OF DEFENCE)",
-            "tempat_penetapan": "Jakarta",
-            "ditetapkan_tanggal": "05-08-2020",
-            "pejabat_yang_menetapkan": "JOKO WIDODO",
-            "status": "Berlaku",
-            "tahun_pengundangan": "2020",
-            "nomor_pengundangan": "187",
-            "nomor_tambahan": "6543",
-            "tanggal_pengundangan": "06-08-2020",
-            "pejabat_pengundangan": null,
-            "dasar_hukum": [
-                "Tentang Undang-undang Dasar Negara Republik Indonesia Tahun 1945",
-                "Undang-Undang Nomor 24 Tahun 2000 Tentang Perjanjian Internasional"
-            ],
-            "mengubah": [],
-            "diubah_oleh": [],
-            "mencabut": [],
-            "dicabut_oleh": [],
-            "melaksanakan_amanat_peraturan": [],
-            "dilaksanakan_oleh_peraturan_pelaksana": [],
-            "filenames": [
-                "uu4-2020bt.pdf",
-                "uu4-2020pjl.pdf"
-            ],
-            "reference_urls": [
-                "https://peraturan.go.id/files/uu4-2020bt.pdf",
-                "https://peraturan.go.id/files/uu4-2020pjl.pdf"
-            ],
-            "resource_urls": [
-                "https://storage.cloud.google.com/lexin-ta.appspot.com/legal_document/uu4-2020bt.pdf",
-                "https://storage.cloud.google.com/lexin-ta.appspot.com/legal_document/uu4-2020pjl.pdf"
-            ]
+      "title": "Undang-undang Nomor 1 Tahun 2024",
+      "jenis_bentuk_peraturan": "UNDANG-UNDANG",
+      "pemrakarsa": "PEMERINTAH PUSAT",
+      "nomor": "1",
+      "tahun": 2024,
+      "tentang": "PERUBAHAN KEDUA ATAS UNDANG-UNDANG NOMOR 11 TAHUN 2008 TENTANG INFORMASI DAN TRANSAKSI ELEKTRONIK",
+      "tempat_penetapan": "Jakarta",
+      "ditetapkan_tanggal": "02-01-2024",
+      "pejabat_yang_menetapkan": "JOKO WIDODO",
+      "status": "Berlaku",
+      "tahun_pengundangan": 2024,
+      "tanggal_pengundangan": "02-01-2024",
+      "nomor_pengundangan": 1,
+      "nomor_tambahan": 6905,
+      "pejabat_pengundangan": "PRATIKNO",
+      "dasar_hukum": [
+        {
+          "id": "undang-undang-nomor-11-tahun-2008",
+          "title": "Undang-Undang Nomor 11 Tahun 2008 Tentang Informasi dan Transaksi Elektronik"
         }
+      ],
+      "mengubah": [
+        {
+          "id": "undang-undang-nomor-19-tahun-2016",
+          "title": "Undang-Undang Nomor 19 Tahun 2016 Tentang Perubahan Atas Undang-undang Nomor 11 Tahun 2008 Tentang Informasi dan Transaksi Elektronik"
+        },
+        {
+          "id": "undang-undang-nomor-11-tahun-2008",
+          "title": "Undang-Undang Nomor 11 Tahun 2008 Tentang Informasi dan Transaksi Elektronik"
+        }
+      ],
+      "diubah_oleh": [],
+      "mencabut": [],
+      "dicabut_oleh": [],
+      "melaksanakan_amanat_peraturan": [],
+      "dilaksanakan_oleh_peraturan_pelaksana": [],
+      "link": "https://peraturan.go.id/id/uu-no-1-tahun-2024",
+      "filenames": [
+        "uu-no-1-tahun-2024.pdf"
+      ],
+      "reference_urls": [
+        "https://peraturan.go.id/files/uu-no-1-tahun-2024.pdf"
+      ],
+      "resource_urls": [
+        "https://storage.cloud.google.com/lexin-ta.appspot.com/legal_document/uu-no-1-tahun-2024.pdf"
+      ]
     }
     """
 
@@ -629,25 +647,53 @@ def search_legal_document_content_by_id(
     return text_list
 
 
-def search_multiple_legal_document_by_id_list(es_client: ESClientDep, document_id: list[str]) -> list[dict]:
+def search_legal_document_detail_by_id_list(es_client: ESClientDep, document_id: list[str]) -> list[dict]:
     """Retrieve multiple summarized legal document metadata by list of ids.
 
     The return value of this function is a list of dictionaries as follows:
     [
         {
             "_index": "legal_document",
-            "_id": "cgHSHZIBIi1nR4ibuLUH",
+            "_id": "undang-undang-nomor-1-tahun-2024",
             "_score": 1,
             "_source": {
-                "title": "Undang-undang Nomor 24 Tahun 2019 Tentang Ekonomi Kreatif",
+                "title": "Undang-undang Nomor 1 Tahun 2024",
                 "jenis_bentuk_peraturan": "UNDANG-UNDANG",
                 "pemrakarsa": "PEMERINTAH PUSAT",
-                "nomor": "24",
-                "tahun": "2019",
-                "tentang": "EKONOMI KREATIF",
+                "nomor": "1",
+                "tahun": 2024,
+                "tentang": "PERUBAHAN KEDUA ATAS UNDANG-UNDANG NOMOR 11 TAHUN 2008 TENTANG INFORMASI DAN TRANSAKSI ELEKTRONIK",
                 "tempat_penetapan": "Jakarta",
-                "ditetapkan_tanggal": "24 Oktober 2019",
-                "status": "Berlaku"
+                "ditetapkan_tanggal": "02-01-2024",
+                "pejabat_yang_menetapkan": "JOKO WIDODO",
+                "status": "Berlaku",
+                "tahun_pengundangan": 2024,
+                "tanggal_pengundangan": "02-01-2024",
+                "nomor_pengundangan": 1,
+                "nomor_tambahan": 6905,
+                "pejabat_pengundangan": "PRATIKNO",
+                "dasar_hukum": [
+                    {
+                        "id": "undang-undang-nomor-11-tahun-2008",
+                        "title": "Undang-Undang Nomor 11 Tahun 2008 Tentang Informasi dan Transaksi Elektronik"
+                    }
+                ],
+                "mengubah": [
+                    {
+                        "id": "undang-undang-nomor-19-tahun-2016",
+                        "title": "Undang-Undang Nomor 19 Tahun 2016 Tentang Perubahan Atas Undang-undang Nomor 11 Tahun 2008 Tentang Informasi dan Transaksi Elektronik"
+                    },
+                    {
+                        "id": "undang-undang-nomor-11-tahun-2008",
+                        "title": "Undang-Undang Nomor 11 Tahun 2008 Tentang Informasi dan Transaksi Elektronik"
+                    }
+                ],
+                "diubah_oleh": [],
+                "mencabut": [],
+                "dicabut_oleh": [],
+                "melaksanakan_amanat_peraturan": [],
+                "dilaksanakan_oleh_peraturan_pelaksana": [],
+                "link": "https://peraturan.go.id/id/uu-no-1-tahun-2024"
             }
         },
         ...
@@ -664,7 +710,8 @@ def search_multiple_legal_document_by_id_list(es_client: ESClientDep, document_i
         source={
             "excludes": [
                 "filenames",
-                "content",
+                "content_type",
+                "content_text",
                 "reference_urls",
                 "resource_urls"
             ]
@@ -676,9 +723,9 @@ def search_multiple_legal_document_by_id_list(es_client: ESClientDep, document_i
     return document_hits
 
 
-def search_multiple_legal_document(
+def search_legal_document(
         es_client: ESClientDep, query: str, page: int = 1, size: int = 10,
-        jenis_bentuk_peraturan: str = None,
+        jenis_bentuk_peraturan: list[str] = None,
         status: str = None,
         sort: str = "_score"
 ) -> dict:
@@ -687,7 +734,7 @@ def search_multiple_legal_document(
     query                   : query string used to search document by its content
     page                    : determines which page to get (defaults to and starts with 1)
     size                    : the amount of returned document in a single query (defaults to 10)
-    jenis_bentuk_peraturan  : string value used to filter jenis_bentuk_peraturan (such as "UNDANG-UNDANG")
+    jenis_bentuk_peraturan  : list of string values used to filter jenis_bentuk_peraturan (such as "UNDANG-UNDANG")
     status                  : string value used to filter status (such as "Berlaku")
     sort                    : string value used to sort by field name descending (such as "ditetapkan_tanggal"),
                               defaults to sort by score
@@ -733,11 +780,20 @@ def search_multiple_legal_document(
     }
 
     # Create filters if specified.
-    post_filter = {}
+    post_filter = {
+        "bool": {
+            "should": []
+        }
+    }
+
     if jenis_bentuk_peraturan:
-        post_filter["term"] = {"jenis_bentuk_peraturan": jenis_bentuk_peraturan}
+        for jenis in jenis_bentuk_peraturan:
+            jenis_filter = {"term": {"jenis_bentuk_peraturan": jenis}}
+            post_filter["bool"]["should"].append(jenis_filter)
+
     if status:
-        post_filter["term"] = {"status": status}
+        status_filter = {"term": {"status": status}}
+        post_filter["bool"]["should"].append(status_filter)
 
     if post_filter:
         search_parameters["post_filter"] = post_filter
@@ -832,7 +888,7 @@ def get_read_legal_document_bookmark_by_user(session: Session, token_payload: JW
 
     # Query elasticsearch using document id list.
     document_id_list = [doc.document_id for doc in db_legal_document_bookmark]
-    document_hits = search_multiple_legal_document_by_id_list(es_client, document_id_list)
+    document_hits = search_legal_document_detail_by_id_list(es_client, document_id_list)
 
     return document_hits
 
