@@ -208,7 +208,6 @@ def get_upload_legal_document(es_client: ESClientDep, file: UploadFile) -> dict:
             "dicabut_oleh": [],
             "melaksanakan_amanat_peraturan": [],
             "dilaksanakan_oleh_peraturan_pelaksana": [],
-            "link": "https://peraturan.go.id/id/uu-no-1-tahun-2024",
             "filenames": [
                 "uu-no-1-tahun-2024.pdf"
             ],
@@ -579,7 +578,6 @@ def search_legal_document_detail_by_id(es_client: ESClientDep, document_id: str)
       "dicabut_oleh": [],
       "melaksanakan_amanat_peraturan": [],
       "dilaksanakan_oleh_peraturan_pelaksana": [],
-      "link": "https://peraturan.go.id/id/uu-no-1-tahun-2024",
       "filenames": [
         "uu-no-1-tahun-2024.pdf"
       ],
@@ -693,7 +691,6 @@ def search_legal_document_detail_by_id_list(es_client: ESClientDep, document_id:
                 "dicabut_oleh": [],
                 "melaksanakan_amanat_peraturan": [],
                 "dilaksanakan_oleh_peraturan_pelaksana": [],
-                "link": "https://peraturan.go.id/id/uu-no-1-tahun-2024"
             }
         },
         ...
@@ -729,7 +726,7 @@ def search_legal_document(
         status: str = None,
         sort: str = "_score"
 ) -> dict:
-    """Search documents using all of its field in Elasticsearch.
+    """Search documents by its title and extracted text in Elasticsearch.
 
     query                   : query string used to search document by its content
     page                    : determines which page to get (defaults to and starts with 1)
@@ -748,13 +745,60 @@ def search_legal_document(
         "index": ELASTICSEARCH_LEGAL_DOCUMENT_INDEX,
         "from_": from_,
         "size": size,
-        # Query string is used to search the document using all of its field.
+
+        # Define a query with additional scoring parameters.
         "query": {
-            "query_string": {
-              "query": query,
-              "fields": ["*"]
+            "function_score": {
+                # Query string is used to search the document using a list of fields.
+                "query": {
+                    "query_string": {
+                        "query": query,
+                        "fields": ["title", "tentang", "content_text"]
+                    }
+                },
+                # Add weights to jenis_bentuk_peraturan values.
+                "functions": [
+                    {
+                        "filter": {"term": {"jenis_bentuk_peraturan": "UNDANG-UNDANG DASAR"}},
+                        "weight": 2.4
+                    },
+                    {
+                        "filter": {"term": {"jenis_bentuk_peraturan": "KETETAPAN MAJELIS PERMUSYAWARATAN RAKYAT"}},
+                        "weight": 2.2
+                    },
+                    {
+                        "filter": {"term": {"jenis_bentuk_peraturan": "UNDANG-UNDANG"}},
+                        "weight": 2.0
+                    },
+                    {
+                        "filter": {"term": {"jenis_bentuk_peraturan": "PERATURAN PEMERINTAH PENGGANTI UNDANG-UNDANG"}},
+                        "weight": 2.0
+                    },
+                    {
+                        "filter": {"term": {"jenis_bentuk_peraturan": "PERATURAN PEMERINTAH"}},
+                        "weight": 1.8
+                    },
+                    {
+                        "filter": {"term": {"jenis_bentuk_peraturan": "PERATURAN PRESIDEN"}},
+                        "weight": 1.6
+                    },
+                    {
+                        "filter": {"term": {"jenis_bentuk_peraturan": "PERATURAN MENTERI"}},
+                        "weight": 1.4
+                    },
+                    {
+                        "filter": {"term": {"jenis_bentuk_peraturan": "PERATURAN DAERAH"}},
+                        "weight": 1.2
+                    },
+                    {
+                        "filter": {"term": {"jenis_bentuk_peraturan": "PERATURAN BADAN/LEMBAGA"}},
+                        "weight": 1.0
+                    },
+                ],
+                "boost_mode": "multiply"
             }
         },
+
         # Exclude fields on the return search query value.
         "source": {
             "includes": [
@@ -764,6 +808,7 @@ def search_legal_document(
                 "status"
             ]
         },
+
         # Aggregates all unique values of a field, also return it's count based on the search query.
         "aggs": {
             "jenis_bentuk_peraturan_uniques": {
