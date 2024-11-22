@@ -54,9 +54,6 @@ class LegalDocumentRead(LegalDocumentBase):
 
 # Elasticsearch mappings used for initial index creation of legal documents.
 ELASTICSEARCH_LEGAL_DOCUMENT_MAPPINGS = {
-    "settings": {
-        "index.mapping.nested_objects.limit": 20000
-    },
     "mappings": {
         "properties": {
             # Concise mappings.
@@ -130,12 +127,12 @@ ELASTICSEARCH_LEGAL_DOCUMENT_MAPPINGS = {
                 }
             },
 
-            "filenames": {"type": "keyword"},       # This is an array of strings.
+            "filenames": {"type": "text"},          # This is an array of strings.
             "resource_urls": {"type": "text"},      # This is an array of strings.
             "reference_urls": {"type": "text"},     # This is an array of strings.
 
             "content_type": {"type": "keyword"},    # This is an array of strings.
-            "content_text": {"type": "keyword"},    # This is an array of strings.
+            "content_text": {"type": "text"},       # This is an array of strings.
 
         }
     }
