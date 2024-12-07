@@ -15,16 +15,23 @@ RABBITMQ_EXCHANGE = os.getenv('RABBITMQ_EXCHANGE')
 RABBITMQ_ROUTING_KEY = os.getenv('RABBITMQ_ROUTING_KEY')
 
 
+# Initialize connection, channel, and declare queue.
+try:
+    credentials = pika.PlainCredentials(username=RABBITMQ_USER, password=RABBITMQ_PASS)
+    parameters = pika.ConnectionParameters(host=RABBITMQ_HOST, port=RABBITMQ_PORT, credentials=credentials)
+
+    # Establish connection and channel
+    connection = pika.BlockingConnection(parameters)
+    channel = connection.channel()
+    channel.queue_declare(queue=RABBITMQ_QUEUE, durable=True)
+    print(f"Queue {RABBITMQ_QUEUE} declared successfully.")
+except Exception as e:
+    print(f"Error during RabbitMQ startup initialization: {e}")
+    raise e
+
+
 def publish_message_with_response(message: dict) -> dict:
     try:
-        credentials = pika.PlainCredentials(username=RABBITMQ_USER, password=RABBITMQ_PASS)
-        parameters = pika.ConnectionParameters(host=RABBITMQ_HOST, port=RABBITMQ_PORT, credentials=credentials)
-
-        # Establish connection and channel
-        connection = pika.BlockingConnection(parameters)
-        channel = connection.channel()
-        channel.queue_declare(queue=RABBITMQ_QUEUE, durable=True)
-
         # Declare a callback queue for the reply
         result = channel.queue_declare(queue="", exclusive=True)
         callback_queue = result.method.queue

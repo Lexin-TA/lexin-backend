@@ -49,6 +49,8 @@ jobs:
       RABBITMQ_EXCHANGE: ${{ secrets.RABBITMQ_EXCHANGE }}
       RABBITMQ_ROUTING_KEY: ${{ secrets.RABBITMQ_ROUTING_KEY }}
 
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -117,6 +119,8 @@ jobs:
       RABBITMQ_QUEUE: ${{ secrets.RABBITMQ_QUEUE }}
       RABBITMQ_EXCHANGE: ${{ secrets.RABBITMQ_EXCHANGE }}
       RABBITMQ_ROUTING_KEY: ${{ secrets.RABBITMQ_ROUTING_KEY }}
+
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 
     steps:
     - name: Checkout
@@ -204,7 +208,10 @@ jobs:
         echo "RABBITMQ_EXCHANGE=${{ secrets.RABBITMQ_EXCHANGE }}" >> .env
         echo "RABBITMQ_ROUTING_KEY=${{ secrets.RABBITMQ_ROUTING_KEY }}" >> .env
         
+        echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> .env
+
         echo "DOCKER_IMAGE_BACKEND=${{ secrets.DOCKER_IMAGE_BACKEND }}" >> .env
+        echo "DOCKER_IMAGE_MESSAGE_CONSUMER=${{ secrets.DOCKER_IMAGE_MESSAGE_CONSUMER }}" >> .env
 
     - name: Create Google Application Credentials json
       uses: jsdaniell/create-json@1.1.2
@@ -298,7 +305,10 @@ jobs:
         echo "RABBITMQ_EXCHANGE=${{ secrets.RABBITMQ_EXCHANGE }}" >> .env
         echo "RABBITMQ_ROUTING_KEY=${{ secrets.RABBITMQ_ROUTING_KEY }}" >> .env
         
+        echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> .env
+
         echo "DOCKER_IMAGE_BACKEND=${{ secrets.DOCKER_IMAGE_BACKEND }}" >> .env
+        echo "DOCKER_IMAGE_MESSAGE_CONSUMER=${{ secrets.DOCKER_IMAGE_MESSAGE_CONSUMER }}" >> .env
 
     - name: Create Google Application Credentials json
       uses: jsdaniell/create-json@1.1.2

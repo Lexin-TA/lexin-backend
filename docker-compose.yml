@@ -44,7 +44,7 @@ services:
       - ELASTICSEARCH_URL=http://elasticsearch:9200
       - ELASTICSEARCH_LEGAL_DOCUMENT_INDEX=${ELASTICSEARCH_LEGAL_DOCUMENT_INDEX}
 
-      - RABBITMQ_HOST=amqp://rabbitmq
+      - RABBITMQ_HOST=rabbitmq
       - RABBITMQ_PORT=${RABBITMQ_PORT}
       - RABBITMQ_USER=${RABBITMQ_USER}
       - RABBITMQ_PASS=${RABBITMQ_PASS}
@@ -52,6 +52,29 @@ services:
       - RABBITMQ_QUEUE=${RABBITMQ_QUEUE}
       - RABBITMQ_EXCHANGE=${RABBITMQ_EXCHANGE}
       - RABBITMQ_ROUTING_KEY=${RABBITMQ_ROUTING_KEY}
+
+    networks:
+      - app-network
+
+  message-consumer:
+    image: ${DOCKER_IMAGE_MESSAGE_CONSUMER}
+    container_name: message-consumer
+    depends_on:
+      - backend
+    environment:
+      - ELASTICSEARCH_URL=http://elasticsearch:9200
+      - ELASTICSEARCH_LEGAL_DOCUMENT_INDEX=${ELASTICSEARCH_LEGAL_DOCUMENT_INDEX}
+
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=${RABBITMQ_PORT}
+      - RABBITMQ_USER=${RABBITMQ_USER}
+      - RABBITMQ_PASS=${RABBITMQ_PASS}
+
+      - RABBITMQ_QUEUE=${RABBITMQ_QUEUE}
+      - RABBITMQ_EXCHANGE=${RABBITMQ_EXCHANGE}
+      - RABBITMQ_ROUTING_KEY=${RABBITMQ_ROUTING_KEY}
+
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
 
     networks:
       - app-network
