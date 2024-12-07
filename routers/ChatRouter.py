@@ -93,8 +93,10 @@ def read_chat_room_documents(
 
 @router.post("/chat-room/inference/{chat_room_id}")
 def read_chat_room_inference(
-        *, session: SessionDep, token_payload: JWTDecodeDep, chat_room_id: int, message: ChatMessageInferenceQuestion
+        *, session: SessionDep, token_payload: JWTDecodeDep,
+        chat_room_id: int, message: ChatMessageInferenceQuestion,
+        es_client: ESClientDep
 ):
-    rag_response = ChatService.get_chat_inference_helper(session, token_payload, chat_room_id, message)
+    rag_response = ChatService.get_chat_inference_helper(session, token_payload, chat_room_id, message, es_client)
 
     return rag_response

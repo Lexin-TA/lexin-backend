@@ -3,6 +3,7 @@ from typing import Sequence
 
 import httpx
 from dotenv import load_dotenv
+from openai import OpenAI
 from pydantic import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session, select
@@ -21,9 +22,13 @@ from services.LegalDocumentService import search_legal_document
 load_dotenv()
 
 RAG_URL = os.getenv('RAG_URL')
+ELASTICSEARCH_LEGAL_DOCUMENT_INDEX = os.getenv('ELASTICSEARCH_LEGAL_DOCUMENT_INDEX')
 
 # Initialize websocket manager.
 websocket_manager = WebSocketManager()
+
+# Initialize OpenAI client.
+openai_client = OpenAI()
 
 
 # Websocket endpoint for generative search chat with RAG endpoint.
@@ -51,8 +56,8 @@ async def get_websocket_endpoint(
 
             # Send user prompt to RAG inference endpoint.
             message = ChatMessageInferenceQuestion(question=user_question)
-            rag_answer_dict = get_chat_inference_helper(session, token_payload, chat_room_id, message)
-            rag_answer = str(rag_answer_dict["answer"])
+            rag_answer_dict = get_chat_inference_helper(session, token_payload, chat_room_id, message, es_client)
+            rag_answer = rag_answer_dict
 
             # Save user question and rag answer to database.
             chat_message_create = ChatMessageCreate(question=user_question,
@@ -123,7 +128,8 @@ def get_chat_inference_helper(
         session: Session,
         token_payload: JWTDecodeDep,
         chat_room_id: int,
-        message: ChatMessageInferenceQuestion
+        message: ChatMessageInferenceQuestion,
+        es_client: ESClientDep
 ):
     # Check if current user is owner of chat room.
     user_id = token_payload.get('sub')
@@ -148,9 +154,195 @@ def get_chat_inference_helper(
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
 
     # Do inference.
-    inference = publish_message_with_response(chat_message_inference.dict())
+    # inference = publish_message_with_response(chat_message_inference.dict())
+
+    # Retrieve relevant documents
+    documents = search_elasticsearch(es_client, message.question)
+
+    if not documents:
+        print("No relevant documents found.")
+        return
+
+    # Generate response with OpenAI
+    inference = generate_response_with_rag(chat_message_inference.dict(), documents)
 
     return inference
+
+
+def search_elasticsearch(es_client, query, size=5):
+    """
+    Search for relevant documents in Elasticsearch.
+    """
+
+    search_result = es_client.search(
+        index=ELASTICSEARCH_LEGAL_DOCUMENT_INDEX,
+        size=size,
+        query={
+            "function_score": {
+                "query": {
+                    "bool": {
+                        "should": [
+                            {"match": {"title": query}},
+                            {"match": {"jenis_bentuk_peraturan": query}},
+                            {"match": {"tentang": query}},
+                            {"match": {"content_text": query}},
+                            {
+                                "nested": {
+                                    "path": "dasar_hukum",
+                                    "query": {
+                                        "match": {"dasar_hukum.title": query}
+                                    }
+                                }
+                            },
+                            {
+                                "nested": {
+                                    "path": "mengubah",
+                                    "query": {
+                                        "match": {"mengubah.title": query}
+                                    }
+                                }
+                            },
+                            {
+                                "nested": {
+                                    "path": "diubah_oleh",
+                                    "query": {
+                                        "match": {"diubah_oleh.title": query}
+                                    }
+                                }
+                            },
+                            {
+                                "nested": {
+                                    "path": "mencabut",
+                                    "query": {
+                                        "match": {"mencabut.title": query}
+                                    }
+                                }
+                            },
+                            {
+                                "nested": {
+                                    "path": "dicabut_oleh",
+                                    "query": {
+                                        "match": {"dicabut_oleh.title": query}
+                                    }
+                                }
+                            },
+                            {
+                                "nested": {
+                                    "path": "melaksanakan_amanat_peraturan",
+                                    "query": {
+                                        "match": {"melaksanakan_amanat_peraturan.title": query}
+                                    }
+                                }
+                            },
+                            {
+                                "nested": {
+                                    "path": "dilaksanakan_oleh_peraturan_pelaksana",
+                                    "query": {
+                                        "match": {"dilaksanakan_oleh_peraturan_pelaksana.title": query}
+                                    }
+                                }
+                            },
+                        ]
+                    }
+                },
+                "functions": [
+                    {
+                        "linear": {
+                            "ditetapkan_tanggal": {
+                                "origin": "now",
+                                "scale": "365d",
+                                "offset": "365d",
+                                "decay": 0.5
+                            }
+                        }
+                    },
+                    {
+                        "filter": {"term": {"jenis_bentuk_peraturan": "UNDANG-UNDANG DASAR"}},
+                        "weight": 2.4
+                    },
+                    {
+                        "filter": {"term": {"jenis_bentuk_peraturan": "KETETAPAN MAJELIS PERMUSYAWARATAN RAKYAT"}},
+                        "weight": 2.2
+                    },
+                    {
+                        "filter": {"term": {"jenis_bentuk_peraturan": "UNDANG-UNDANG"}},
+                        "weight": 2.0
+                    },
+                    {
+                        "filter": {"term": {"jenis_bentuk_peraturan": "PERATURAN PEMERINTAH PENGGANTI UNDANG-UNDANG"}},
+                        "weight": 2.0
+                    },
+                    {
+                        "filter": {"term": {"jenis_bentuk_peraturan": "PERATURAN PEMERINTAH"}},
+                        "weight": 1.8
+                    },
+                    {
+                        "filter": {"term": {"jenis_bentuk_peraturan": "PERATURAN PRESIDEN"}},
+                        "weight": 1.6
+                    },
+                    {
+                        "filter": {"term": {"jenis_bentuk_peraturan": "PERATURAN MENTERI"}},
+                        "weight": 1.4
+                    },
+                    {
+                        "filter": {"term": {"jenis_bentuk_peraturan": "PERATURAN DAERAH"}},
+                        "weight": 1.2
+                    },
+                    {
+                        "filter": {"term": {"jenis_bentuk_peraturan": "PERATURAN BADAN/LEMBAGA"}},
+                        "weight": 1.0
+                    },
+                ],
+                "boost_mode": "avg"
+            }
+        },
+
+        source={
+            "includes": [
+                "content_text"
+            ]
+        },
+    )
+
+    # Extract content from hits
+    documents = [
+        hit["_source"]["content_text"][0] for hit in search_result["hits"]["hits"]
+    ]
+
+    return documents
+
+
+def generate_response_with_rag(query, documents):
+    """
+    Use OpenAI API to generate a response augmented with retrieved documents.
+    """
+    doc_str_list = []
+    for doc in documents:
+        doc_str = ' '.join(doc)
+        doc_str_list.append(doc_str)
+
+    # Combine documents into a single context
+    prompt = (f"Answer the question with these additional legal documents context if they are relevant:\n\n"
+              f"{documents}\n\n"
+              f"Question: {query}\n\n"
+              f"Answer:")
+
+    completion = openai_client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {
+                "role": "system",
+                "content": "You are a helpful assistant that answers question about Indonesian law and regulations. "
+                           "Respond using Indonesian language"
+            },
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ]
+    )
+
+    return completion.choices[0].message.content
 
 
 # Create chat room with the user's initial prompt as the title.
