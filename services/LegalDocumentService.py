@@ -874,6 +874,147 @@ def search_legal_document(
     return pagination_res
 
 
+def retrieve_document_text_content(es_client: ESClientDep, query: str, size=5) -> list[list[str]]:
+    """ Retrieve text content of relevant legal documents in Elasticsearch for RAG. """
+
+    search_result = es_client.search(
+        index=ELASTICSEARCH_LEGAL_DOCUMENT_INDEX,
+        size=size,
+        query={
+            "function_score": {
+                "query": {
+                    "bool": {
+                        "should": [
+                            {"match": {"title": query}},
+                            {"match": {"jenis_bentuk_peraturan": query}},
+                            {"match": {"tentang": query}},
+                            {"match": {"content_text": query}},
+                            {
+                                "nested": {
+                                    "path": "dasar_hukum",
+                                    "query": {
+                                        "match": {"dasar_hukum.title": query}
+                                    }
+                                }
+                            },
+                            {
+                                "nested": {
+                                    "path": "mengubah",
+                                    "query": {
+                                        "match": {"mengubah.title": query}
+                                    }
+                                }
+                            },
+                            {
+                                "nested": {
+                                    "path": "diubah_oleh",
+                                    "query": {
+                                        "match": {"diubah_oleh.title": query}
+                                    }
+                                }
+                            },
+                            {
+                                "nested": {
+                                    "path": "mencabut",
+                                    "query": {
+                                        "match": {"mencabut.title": query}
+                                    }
+                                }
+                            },
+                            {
+                                "nested": {
+                                    "path": "dicabut_oleh",
+                                    "query": {
+                                        "match": {"dicabut_oleh.title": query}
+                                    }
+                                }
+                            },
+                            {
+                                "nested": {
+                                    "path": "melaksanakan_amanat_peraturan",
+                                    "query": {
+                                        "match": {"melaksanakan_amanat_peraturan.title": query}
+                                    }
+                                }
+                            },
+                            {
+                                "nested": {
+                                    "path": "dilaksanakan_oleh_peraturan_pelaksana",
+                                    "query": {
+                                        "match": {"dilaksanakan_oleh_peraturan_pelaksana.title": query}
+                                    }
+                                }
+                            },
+                        ]
+                    }
+                },
+                "functions": [
+                    {
+                        "linear": {
+                            "ditetapkan_tanggal": {
+                                "origin": "now",
+                                "scale": "365d",
+                                "offset": "365d",
+                                "decay": 0.5
+                            }
+                        }
+                    },
+                    {
+                        "filter": {"term": {"jenis_bentuk_peraturan": "UNDANG-UNDANG DASAR"}},
+                        "weight": 2.4
+                    },
+                    {
+                        "filter": {"term": {"jenis_bentuk_peraturan": "KETETAPAN MAJELIS PERMUSYAWARATAN RAKYAT"}},
+                        "weight": 2.2
+                    },
+                    {
+                        "filter": {"term": {"jenis_bentuk_peraturan": "UNDANG-UNDANG"}},
+                        "weight": 2.0
+                    },
+                    {
+                        "filter": {"term": {"jenis_bentuk_peraturan": "PERATURAN PEMERINTAH PENGGANTI UNDANG-UNDANG"}},
+                        "weight": 2.0
+                    },
+                    {
+                        "filter": {"term": {"jenis_bentuk_peraturan": "PERATURAN PEMERINTAH"}},
+                        "weight": 1.8
+                    },
+                    {
+                        "filter": {"term": {"jenis_bentuk_peraturan": "PERATURAN PRESIDEN"}},
+                        "weight": 1.6
+                    },
+                    {
+                        "filter": {"term": {"jenis_bentuk_peraturan": "PERATURAN MENTERI"}},
+                        "weight": 1.4
+                    },
+                    {
+                        "filter": {"term": {"jenis_bentuk_peraturan": "PERATURAN DAERAH"}},
+                        "weight": 1.2
+                    },
+                    {
+                        "filter": {"term": {"jenis_bentuk_peraturan": "PERATURAN BADAN/LEMBAGA"}},
+                        "weight": 1.0
+                    },
+                ],
+                "boost_mode": "avg"
+            }
+        },
+
+        source={
+            "includes": [
+                "content_text"
+            ]
+        },
+    )
+
+    # Extract text_content from hits, extract only the first (index 0) text_content of each document
+    documents = [
+        hit["_source"]["content_text"][0] for hit in search_result["hits"]["hits"]
+    ]
+
+    return documents
+
+
 def get_legal_document_distinct_value_of_field(es_client: ESClientDep, field: str, size: int = 16):
     """Return a size amount of unique value of a field in legal document (defaults to size=16)."""
     try:

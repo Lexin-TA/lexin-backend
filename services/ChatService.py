@@ -3,6 +3,7 @@ from typing import Sequence
 
 import httpx
 from dotenv import load_dotenv
+from openai import OpenAI
 from pydantic import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session, select
@@ -13,17 +14,20 @@ from internal.elastic import ESClientDep
 from internal.message_broker import publish_message_with_response
 from internal.websocket import WebSocketManager
 from models.ChatMessageModel import ChatMessageCreate, ChatMessage, ChatMessageBase, ChatMessageQueryDocument, \
-    ChatMessageInference, ChatMessageInferenceQuestion
+    ChatMessageInference, ChatMessageInferenceQuestion, ChatMessageRead
 from models.ChatRoomModel import ChatRoomCreate, ChatRoom, ChatRoomUpdate
-from services.LegalDocumentService import search_legal_document
+from services.LegalDocumentService import search_legal_document, retrieve_document_text_content
 
 # Load Environment Variables.
 load_dotenv()
 
-RAG_URL = os.getenv('RAG_URL')
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 # Initialize websocket manager.
 websocket_manager = WebSocketManager()
+
+# Initialize OpenAI client.
+openai_client = OpenAI(api_key=OPENAI_API_KEY)
 
 
 # Websocket endpoint for generative search chat with RAG endpoint.
@@ -51,7 +55,7 @@ async def get_websocket_endpoint(
 
             # Send user prompt to RAG inference endpoint.
             message = ChatMessageInferenceQuestion(question=user_question)
-            rag_answer_dict = get_chat_inference_helper(session, token_payload, chat_room_id, message)
+            rag_answer_dict = get_chat_inference_helper(session, token_payload, es_client, chat_room_id, message)
             rag_answer = str(rag_answer_dict["answer"])
 
             # Save user question and rag answer to database.
@@ -60,10 +64,7 @@ async def get_websocket_endpoint(
             _ = create_chat_message(session, chat_message_create, chat_room_id)
 
             # Broadcast message json to frontend (in case of multiple tabs in browser).
-            response_json = {
-                "rag_result": rag_answer
-            }
-            await websocket_manager.broadcast(response_json, chat_room_id)
+            await websocket_manager.broadcast(rag_answer_dict, chat_room_id)
 
     except WebSocketDisconnect:
         websocket_manager.disconnect(chat_room_id)
@@ -122,8 +123,9 @@ def get_chat_documents_helper(
 def get_chat_inference_helper(
         session: Session,
         token_payload: JWTDecodeDep,
+        es_client: ESClientDep,
         chat_room_id: int,
-        message: ChatMessageInferenceQuestion
+        message: ChatMessageInferenceQuestion,
 ):
     # Check if current user is owner of chat room.
     user_id = token_payload.get('sub')
@@ -143,14 +145,94 @@ def get_chat_inference_helper(
 
     # Validate the model.
     try:
-        _ = ChatMessageInferenceQuestion.model_validate(chat_message_inference)
+        _ = ChatMessageInference.model_validate(chat_message_inference)
     except ValidationError as e:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
 
-    # Do inference.
-    inference = publish_message_with_response(chat_message_inference.dict())
+    # Do retrival augmented generation.
+    inference = retrieval_augmented_generation(es_client, chat_message_inference)
+
+    # Prepare response.
+    response = {"answer": inference}
+
+    return response
+
+
+def retrieval_augmented_generation(es_client: ESClientDep, chat_message_inference: ChatMessageInference):
+    """ Perform RAG with legal documents from elasticsearch and inference from OpenAI. """
+    query = chat_message_inference.question
+    chat_history = chat_message_inference.chat_history
+
+    # Retrieve text contents of relevant documents.
+    documents = retrieve_document_text_content(es_client, query, size=5)
+
+    # Augment the documents with the question query to produce a prompt
+    prompt = augment_documents(query, documents)
+
+    # Generate response with OpenAI.
+    inference = generate_inference(prompt, chat_history)
 
     return inference
+
+
+def augment_documents(query: str, documents: list[list[str]]) -> str:
+    """ Augmented question query with retrieved documents to produce a suitable prompt. """
+    doc_str_list = []
+    for doc in documents:
+        doc_str = ' '.join(doc)
+        doc_str_list.append(doc_str)
+
+    prompt = (f"Answer the question with these additional legal documents context if they are relevant:\n\n"
+              f"{documents}\n\n"
+              f"Question: {query}\n\n"
+              f"Answer:")
+
+    return prompt
+
+
+def generate_inference(prompt: str, chat_history: list[ChatMessageRead]):
+    """ Use OpenAI API to generate a response from a prompt that's been augmented with retrieved documents. """
+
+    # Prepare chat history messages following the format of OpenAPIs assistant messages.
+    messages_history = []
+
+    if chat_history:
+        for history in chat_history:
+            question = {
+                "role": "user",
+                "content": history.question
+            }
+
+            answer = {
+                "role": "assistant",
+                "content": history.answer
+            }
+
+            messages_history.append(question)
+            messages_history.append(answer)
+
+    # Craft prompt messages for OpenAPIs model.
+    messages_prompt = [
+        {
+            "role": "system",
+            "content": "You are a helpful assistant that answers question about laws in Indonesia. "
+                       "Respond using Indonesian language"
+        },
+        {
+            "role": "user",
+            "content": prompt
+        }
+    ]
+
+    # Do inference with chat history and crafted prompt
+    messages = messages_history + messages_prompt
+
+    completion = openai_client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=messages
+    )
+
+    return completion.choices[0].message.content
 
 
 # Create chat room with the user's initial prompt as the title.
