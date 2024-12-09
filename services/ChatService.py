@@ -11,7 +11,6 @@ from fastapi import WebSocket, WebSocketDisconnect, HTTPException, status, WebSo
 
 from internal.auth import JWTDecodeDep, jwt_decode_access
 from internal.elastic import ESClientDep
-from internal.message_broker import publish_message_with_response
 from internal.websocket import WebSocketManager
 from models.ChatMessageModel import ChatMessageCreate, ChatMessage, ChatMessageBase, ChatMessageQueryDocument, \
     ChatMessageInference, ChatMessageInferenceQuestion, ChatMessageRead
@@ -32,17 +31,28 @@ openai_client = OpenAI(api_key=OPENAI_API_KEY)
 
 # Websocket endpoint for generative search chat with RAG endpoint.
 async def get_websocket_endpoint(
-        session: Session, websocket: WebSocket, es_client: ESClientDep, token: str, chat_room_id: int
+        session: Session, websocket: WebSocket, es_client: ESClientDep, token: str, chat_room_id: int = None
 ):
-    # Check if chat_room exists and current user is owner of chat room.
+    # Get user id from jwt token.
     token_payload = jwt_decode_access(token)
     user_id = token_payload.get('sub')
 
-    db_chat_room = get_chat_room_by_id(session, chat_room_id)
+    if chat_room_id:
+        # If chat_room_id is specified, check ownership with the user id.
+        db_chat_room = get_chat_room_by_id(session, chat_room_id)
 
-    is_owner = is_user_owner_of_chat_room(user_id, db_chat_room)
-    if is_owner is False:
-        raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION)
+        is_owner = is_user_owner_of_chat_room(user_id, db_chat_room)
+        if is_owner is False:
+            raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION)
+    else:
+        # If chat_room_id not available, create one with preset title.
+        user_chat_rooms = get_read_chat_room_by_user_id(session, token_payload)
+
+        chat_room_title = f"Chat room {len(user_chat_rooms)}"
+        chat_room_create = ChatRoomCreate(title=chat_room_title)
+
+        db_chat_room = get_create_chat_room(session, token_payload, chat_room_create)
+        chat_room_id = db_chat_room.id
 
     # Add websocket connection to WebSocketManager.
     await websocket_manager.connect(websocket, chat_room_id)
