@@ -13,7 +13,7 @@ router = APIRouter(prefix="/chat")
 
 @router.websocket("/ws")
 async def websocket_endpoint(
-        *, session: SessionDep, websocket: WebSocket, es_client: ESClientDep, token: str, chat_room_id: int
+        *, session: SessionDep, websocket: WebSocket, es_client: ESClientDep, token: str, chat_room_id: int = None
 ):
     result = await ChatService.get_websocket_endpoint(session, websocket, es_client, token, chat_room_id)
 
