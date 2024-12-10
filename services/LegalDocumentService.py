@@ -751,13 +751,42 @@ def search_legal_document(
             "function_score": {
                 # Query string is used to search the document using a list of fields.
                 "query": {
-                    "query_string": {
-                        "query": query,
-                        "fields": ["title", "tentang", "content_text"]
+                    "bool": {
+                        "should": [
+                            { "match_phrase": { "title": { "query": query, "boost": 4.0 } } },
+                            { "match_phrase": { "tentang": { "query": query, "boost": 2.0 } } },
+                            { "match": { "content_text": { "query": query, "boost": 0.8 } } },
+                        ]
                     }
                 },
                 # Add weights to jenis_bentuk_peraturan values.
                 "functions": [
+                    {
+                        "linear": {
+                            "ditetapkan_tanggal": {
+                                "origin": "now",
+                                "scale": "365d",
+                                "offset": "365d",
+                                "decay": 0.5
+                            }
+                        }
+                    },
+                    {
+                        "filter": {"term": {"status": "Berlaku"}},
+                        "weight": 2.0
+                    },
+                    {
+                        "filter": {"term": {"status": "Tidak Berlaku"}},
+                        "weight": 1.0
+                    },
+                    {
+                        "filter": {"term": {"status": "Telah Diubah"}},
+                        "weight": 1.5
+                    },
+                    {
+                        "filter": {"term": {"jenis_bentuk_peraturan": "UNDANG-UNDANG DASAR"}},
+                        "weight": 2.4
+                    },
                     {
                         "filter": {"term": {"jenis_bentuk_peraturan": "UNDANG-UNDANG DASAR"}},
                         "weight": 2.4
@@ -795,11 +824,12 @@ def search_legal_document(
                         "weight": 1.0
                     },
                 ],
-                "boost_mode": "multiply"
+                "boost_mode": "sum",
+                "score_mode": "sum"
             }
         },
 
-        # Exclude fields on the return search query value.
+        # Includes fields on the return search query value.
         "source": {
             "includes": [
                 "title", "jenis_bentuk_peraturan",
@@ -885,66 +915,10 @@ def retrieve_document_text_content(es_client: ESClientDep, query: str, size=5) -
                 "query": {
                     "bool": {
                         "should": [
-                            {"match": {"title": query}},
+                            {"match_phrase": {"title": {"query": query, "boost": 4.0}}},
                             {"match": {"jenis_bentuk_peraturan": query}},
-                            {"match": {"tentang": query}},
-                            {"match": {"content_text": query}},
-                            {
-                                "nested": {
-                                    "path": "dasar_hukum",
-                                    "query": {
-                                        "match": {"dasar_hukum.title": query}
-                                    }
-                                }
-                            },
-                            {
-                                "nested": {
-                                    "path": "mengubah",
-                                    "query": {
-                                        "match": {"mengubah.title": query}
-                                    }
-                                }
-                            },
-                            {
-                                "nested": {
-                                    "path": "diubah_oleh",
-                                    "query": {
-                                        "match": {"diubah_oleh.title": query}
-                                    }
-                                }
-                            },
-                            {
-                                "nested": {
-                                    "path": "mencabut",
-                                    "query": {
-                                        "match": {"mencabut.title": query}
-                                    }
-                                }
-                            },
-                            {
-                                "nested": {
-                                    "path": "dicabut_oleh",
-                                    "query": {
-                                        "match": {"dicabut_oleh.title": query}
-                                    }
-                                }
-                            },
-                            {
-                                "nested": {
-                                    "path": "melaksanakan_amanat_peraturan",
-                                    "query": {
-                                        "match": {"melaksanakan_amanat_peraturan.title": query}
-                                    }
-                                }
-                            },
-                            {
-                                "nested": {
-                                    "path": "dilaksanakan_oleh_peraturan_pelaksana",
-                                    "query": {
-                                        "match": {"dilaksanakan_oleh_peraturan_pelaksana.title": query}
-                                    }
-                                }
-                            },
+                            {"match_phrase": {"tentang": {"query": query, "boost": 2.0}}},
+                            {"match": {"content_text": {"query": query, "boost": 0.8}}},
                         ]
                     }
                 },
@@ -958,6 +932,22 @@ def retrieve_document_text_content(es_client: ESClientDep, query: str, size=5) -
                                 "decay": 0.5
                             }
                         }
+                    },
+                    {
+                        "filter": {"term": {"status": "Berlaku"}},
+                        "weight": 2.0
+                    },
+                    {
+                        "filter": {"term": {"status": "Tidak Berlaku"}},
+                        "weight": 1.0
+                    },
+                    {
+                        "filter": {"term": {"status": "Telah Diubah"}},
+                        "weight": 1.5
+                    },
+                    {
+                        "filter": {"term": {"jenis_bentuk_peraturan": "UNDANG-UNDANG DASAR"}},
+                        "weight": 2.4
                     },
                     {
                         "filter": {"term": {"jenis_bentuk_peraturan": "UNDANG-UNDANG DASAR"}},
@@ -996,7 +986,8 @@ def retrieve_document_text_content(es_client: ESClientDep, query: str, size=5) -
                         "weight": 1.0
                     },
                 ],
-                "boost_mode": "avg"
+                "boost_mode": "sum",
+                "score_mode": "sum"
             }
         },
 
