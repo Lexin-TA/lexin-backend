@@ -9,6 +9,8 @@ from io import BytesIO
 from typing import IO, List, Dict, Any
 
 import fitz
+import pytesseract
+from PIL import Image
 from dotenv import load_dotenv
 from elasticsearch import ApiError
 from fastapi import UploadFile, HTTPException
@@ -30,6 +32,8 @@ load_dotenv()
 GOOGLE_BUCKET_LEGAL_DOCUMENT_FOLDER_NAME = os.getenv('GOOGLE_BUCKET_LEGAL_DOCUMENT_FOLDER_NAME')
 ELASTICSEARCH_LEGAL_DOCUMENT_INDEX = os.getenv('ELASTICSEARCH_LEGAL_DOCUMENT_INDEX')
 LEGAL_DOCUMENT_METADATA_JSON_FILENAME = "metadata.json"
+
+pytesseract.pytesseract.tesseract_cmd = os.getenv('TESSERACT_PATH')
 
 
 def get_create_legal_document_mappings(es_client: ESClientDep):
@@ -66,51 +70,76 @@ def is_all_uppercase_sentence(text):
     return bool(re.fullmatch(pattern, text))
 
 
+def ocr_extract_page(page):
+    """Perform OCR on a page rendered as an image."""
+    try:
+        pix = page.get_pixmap()
+        image = Image.open(BytesIO(pix.tobytes("png")))
+        return pytesseract.image_to_string(image)
+    except Exception as e:
+        return ""
+
+
+def process_extracted_text(text, content_type_list, content_text_list):
+    """Process extracted text and classify as title or paragraph."""
+    split_text = text.split("\n")
+    cleaned_text = [split for split in split_text if split]
+
+    for split in cleaned_text:
+        text_type = "title" if is_all_uppercase_sentence(split) else "paragraph"
+        content_type_list.append(text_type)
+        content_text_list.append(split)
+
+
 def extract_text_pdf(file: IO[bytes]) -> dict[str, list[str]]:
     """Extracts text from a PDF file using PyMuPDF, dividing it into it's text and corresponding text type."""
 
     content_type_list = []
     content_text_list = []
 
-    try:
-        pdf_data = file.read()
-        pdf_document = fitz.open(stream=pdf_data, filetype="pdf")
+    # try:
+    pdf_data = file.read()
+    pdf_document = fitz.open(stream=pdf_data, filetype="pdf")
 
-        for page in pdf_document:
-            words = page.get_text("words", sort=True)   # words sorted vertical, then horizontal
-            line = [words[0]]                           # list of words in same line
+    for page in pdf_document:
+        # Try to extract text using PyMuPDF
+        words = page.get_text("words", sort=True)  # words sorted vertical, then horizontal
 
-            for w in words[1:]:
-                # get previous word
-                w0 = line[-1]
+        # If no words are extracted, use OCR
+        if not words:
+            text = ocr_extract_page(page)
+            process_extracted_text(text, content_type_list, content_text_list)
+            continue
 
-                # same line (approx. same bottom coord)
-                if abs(w0[3] - w[3]) <= 3:
-                    line.append(w)
+        # If words are available, process them
+        line = [words[0]]  # list of words in the same line
 
-                # new line starts
-                else:
-                    line.sort(key=lambda w: w[0])           # sort words in line left-to-right
-                    text = " ".join([w[4] for w in line])   # text of line
-                    line = [w]                              # init line list again
+        for w in words[1:]:
+            # get previous word
+            w0 = line[-1]
 
-                    # add to output list
-                    text_type = "title" if is_all_uppercase_sentence(text) else "paragraph"
+            # same line (approx. same bottom coord)
+            if abs(w0[3] - w[3]) <= 3:
+                line.append(w)
 
-                    content_type_list.append(text_type)
-                    content_text_list.append(text)
+            # new line starts
+            else:
+                # Sort words in line left-to-right and join into text
+                line.sort(key=lambda w: w[0])
+                text = " ".join([w[4] for w in line])
 
-            # last line
-            text = " ".join([w[4] for w in line])
+                # Determine type and add to lists
+                process_extracted_text(text, content_type_list, content_text_list)
 
-            # add last line to output list
-            text_type = "title" if is_all_uppercase_sentence(text) else "paragraph"
+                # Reset line
+                line = [w]
 
-            content_type_list.append(text_type)
-            content_text_list.append(text)
+        # Process the last line
+        text = " ".join([w[4] for w in line])
+        process_extracted_text(text, content_type_list, content_text_list)
 
-    except Exception as e:
-        pass
+    # except Exception as e:
+    #     pass
 
     # Prepare return dictionary.
     content = {
@@ -253,10 +282,8 @@ def get_upload_legal_document(es_client: ESClientDep, file: UploadFile) -> dict:
 
     # Check if file type is zip.
     content_type = file.content_type
-    is_zip_content_type = False
+    is_zip_content_type = content_type in ("application/zip", "application/x-zip-compressed")
 
-    if content_type == "application/zip" or content_type == "application/x-zip-compressed":
-        is_zip_content_type = True
     if not is_zip_content_type:
         raise HTTPException(status_code=400, detail="Only zip files are allowed.")
 
@@ -267,8 +294,8 @@ def get_upload_legal_document(es_client: ESClientDep, file: UploadFile) -> dict:
 
         if LEGAL_DOCUMENT_METADATA_JSON_FILENAME not in filenames_in_zip_list:
             raise HTTPException(status_code=400, detail="metadata.json not found.")
-        else:
-            filenames_in_zip_list.remove(LEGAL_DOCUMENT_METADATA_JSON_FILENAME)
+
+        filenames_in_zip_list.remove(LEGAL_DOCUMENT_METADATA_JSON_FILENAME)
 
         # Extract metadata json file contents as a dictionary.
         with zip_file.open(LEGAL_DOCUMENT_METADATA_JSON_FILENAME) as extracted_file:
@@ -289,10 +316,10 @@ def get_upload_legal_document(es_client: ESClientDep, file: UploadFile) -> dict:
 
 
 def parse_legal_document_and_metadata_zip(
-    es_client: ESClientDep,
-    zip_file: zipfile.ZipFile,
-    filenames_in_zip_list: List[str],
-    metadata_list: List[Dict[str, Any]]
+        es_client: ESClientDep,
+        zip_file: zipfile.ZipFile,
+        filenames_in_zip_list: List[str],
+        metadata_list: List[Dict[str, Any]]
 ) -> Dict[str, List[Dict[str, Any]]]:
     """Upload filenames described in the metadata into the system and return results of succeeded and failed uploads."""
 
@@ -322,7 +349,7 @@ def parse_legal_document_and_metadata_zip(
     filenames_with_no_metadata = filename_in_zip_set - filename_in_metadata_set
 
     for filename in filenames_with_no_metadata:
-        failed_upload_list.extend({filename: "No metadata detected."})
+        failed_upload_list.append({filename: "No metadata detected."})
 
     return {
         "failed_upload": failed_upload_list,
@@ -331,9 +358,9 @@ def parse_legal_document_and_metadata_zip(
 
 
 def upload_legal_document_helper(
-    es_client: ESClientDep,
-    metadata: Dict[str, Any],
-    zip_file: zipfile.ZipFile
+        es_client: ESClientDep,
+        metadata: Dict[str, Any],
+        zip_file: zipfile.ZipFile
 ) -> Dict[str, Any]:
     """Extract text from PDF files, upload to Google Cloud Storage, and index data in Elasticsearch."""
 
@@ -753,9 +780,11 @@ def search_legal_document(
                 "query": {
                     "bool": {
                         "should": [
-                            { "match_phrase": { "title": { "query": query, "boost": 4.0 } } },
-                            { "match_phrase": { "tentang": { "query": query, "boost": 2.0 } } },
-                            { "match": { "content_text": { "query": query, "boost": 0.8 } } },
+                            {"match_phrase": {"title": {"query": query, "boost": 10.0}}},
+                            {"match": {"title": {"query": query, "boost": 5.0}}},
+                            {"match_phrase": {"tentang": {"query": query, "boost": 10.0}}},
+                            {"match": {"tentang": {"query": query, "boost": 5.0}}},
+                            {"match": {"content_text": {"query": query, "boost": 0.8}}},
                         ]
                     }
                 },
@@ -782,10 +811,6 @@ def search_legal_document(
                     {
                         "filter": {"term": {"status": "Telah Diubah"}},
                         "weight": 1.5
-                    },
-                    {
-                        "filter": {"term": {"jenis_bentuk_peraturan": "UNDANG-UNDANG DASAR"}},
-                        "weight": 2.4
                     },
                     {
                         "filter": {"term": {"jenis_bentuk_peraturan": "UNDANG-UNDANG DASAR"}},
@@ -915,9 +940,10 @@ def retrieve_document_text_content(es_client: ESClientDep, query: str, size=5) -
                 "query": {
                     "bool": {
                         "should": [
-                            {"match_phrase": {"title": {"query": query, "boost": 4.0}}},
-                            {"match": {"jenis_bentuk_peraturan": query}},
-                            {"match_phrase": {"tentang": {"query": query, "boost": 2.0}}},
+                            {"match_phrase": {"title": {"query": query, "boost": 10.0}}},
+                            {"match": {"title": {"query": query, "boost": 5.0}}},
+                            {"match_phrase": {"tentang": {"query": query, "boost": 10.0}}},
+                            {"match": {"tentang": {"query": query, "boost": 5.0}}},
                             {"match": {"content_text": {"query": query, "boost": 0.8}}},
                         ]
                     }
@@ -944,10 +970,6 @@ def retrieve_document_text_content(es_client: ESClientDep, query: str, size=5) -
                     {
                         "filter": {"term": {"status": "Telah Diubah"}},
                         "weight": 1.5
-                    },
-                    {
-                        "filter": {"term": {"jenis_bentuk_peraturan": "UNDANG-UNDANG DASAR"}},
-                        "weight": 2.4
                     },
                     {
                         "filter": {"term": {"jenis_bentuk_peraturan": "UNDANG-UNDANG DASAR"}},
