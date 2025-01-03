@@ -17,7 +17,7 @@ DATABASE_PORT = os.getenv('DATABASE_PORT')
 DATABASE_NAME = os.getenv('DATABASE_NAME')
 
 DATABASE_URL = f"postgresql://{DATABASE_USER}:{DATABASE_PASS}@{DATABASE_HOST}:{DATABASE_PORT}/{DATABASE_NAME}"
-DB_ENGINE = create_engine(DATABASE_URL, echo=True)
+DB_ENGINE = create_engine(DATABASE_URL, echo=True, pool_size=16, max_overflow=32)
 
 
 # Database Session and Table Creation.
