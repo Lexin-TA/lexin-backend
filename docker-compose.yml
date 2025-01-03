@@ -53,6 +53,10 @@ services:
       - RABBITMQ_EXCHANGE=${RABBITMQ_EXCHANGE}
       - RABBITMQ_ROUTING_KEY=${RABBITMQ_ROUTING_KEY}
 
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+
+      - TESSERACT_PATH=${TESSERACT_PATH}
+
     networks:
       - app-network
 
