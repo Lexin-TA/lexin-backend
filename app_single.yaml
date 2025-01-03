@@ -1,5 +1,5 @@
 # Specify service name.
-service : backend
+service : backend-single
 
 # Specify runtime environment.
 runtime: custom
