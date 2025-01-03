@@ -174,7 +174,7 @@ def retrieval_augmented_generation(es_client: ESClientDep, chat_message_inferenc
     chat_history = chat_message_inference.chat_history
 
     # Retrieve text contents of relevant documents.
-    documents = retrieve_document_text_content(es_client, query, size=1)
+    documents = retrieve_document_text_content(es_client, query, size=3)
 
     # Augment the documents with the question query to produce a prompt
     prompt = augment_documents(query, documents)
@@ -189,7 +189,7 @@ def augment_documents(query: str, documents: list[list[str]]) -> str:
     """ Augmented question query with retrieved documents to produce a suitable prompt. """
     doc_str_list = []
     for doc in documents:
-        doc_str = '\n\n'.join(doc)
+        doc_str = ' '.join(doc)
         doc_str_list.append(doc_str)
 
     if doc_str_list:

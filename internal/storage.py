@@ -98,7 +98,9 @@ def upload_file(bucket_name: str, file: IO[bytes], blob_name: str) -> str:
     #     raise HTTPException(status_code=400, detail="A file with this name already exists in storage.")
 
     # Upload file to google cloud storage
-    blob.upload_from_file(file)
+    blob.chunk_size = 262144  # 256 KB
+    blob.upload_from_file(file, timeout=300)
+
     file_url = f"{GOOGLE_CLOUD_STORAGE_URI}/{GOOGLE_BUCKET_NAME}/{blob_name}"
 
     return file_url
