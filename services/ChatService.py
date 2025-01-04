@@ -1,7 +1,9 @@
 import os
 from typing import Sequence
 
+import backoff
 import httpx
+import openai
 from dotenv import load_dotenv
 from openai import OpenAI
 from pydantic import ValidationError
@@ -204,8 +206,12 @@ def augment_documents(query: str, documents: list[list[str]]) -> str:
     return prompt
 
 
+@backoff.on_exception(backoff.expo, openai.RateLimitError, jitter=backoff.full_jitter)
 def generate_inference(prompt: str, chat_history: list[ChatMessageRead]):
-    """ Use OpenAI API to generate a response from a prompt that's been augmented with retrieved documents. """
+    """ Use OpenAI API to generate a response from a prompt that's been augmented with retrieved documents.
+
+    Also, retry with exponential backoff and full jitter when faced with rate limit error.
+    """
 
     # Prepare chat history messages following the format of OpenAPIs assistant messages.
     messages_history = []
