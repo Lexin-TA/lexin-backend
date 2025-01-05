@@ -22,8 +22,8 @@ resources:
 
 # Specify autoscaling of instances.
 automatic_scaling:
-  min_num_instances: 1
-  max_num_instances: 1
+  min_num_instances: 4
+  max_num_instances: 4
 
 # Set environment variables.
 env_variables:
